@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\admin\Downloads\SME-Scoring-APP_fixed\SME-Scoring-APP\SME-Scoring-APP\backend\.venv
+set VIRTUAL_ENV=C:\Users\admin\OneDrive\Desktop\New folder (2)\SME-Scoring-APP\backend\.venv
 
 if not defined PROMPT set PROMPT=$P$G
 
