@@ -1,0 +1,33 @@
+from rest_framework.permissions import BasePermission
+
+
+class IsBankAdmin(BasePermission):
+    def has_permission(self, request, view):
+        u = request.user
+        return bool(
+            u and u.is_authenticated
+            and hasattr(u, "profile")
+            and u.profile.role == "BANK_ADMIN"
+            and u.profile.is_active
+        )
+
+
+class IsApprovedUser(BasePermission):
+    """
+    Evaluators must be approved + active.
+    Bank admins must be active.
+    """
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u and u.is_authenticated and hasattr(u, "profile")):
+            return False
+
+        p = u.profile
+
+        if p.role == "BANK_ADMIN":
+            return p.is_active
+
+        if p.role == "EVALUATOR":
+            return p.is_active and p.is_approved
+
+        return False

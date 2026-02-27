@@ -12,7 +12,7 @@ class Bank(models.Model):
     name = models.CharField(max_length=200, unique=True)
 
     is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+   
 
     def __str__(self):
         return self.name
@@ -49,7 +49,7 @@ class Profile(models.Model):
     is_approved = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    
 
     def __str__(self):
         return f"{self.user.username} - {self.bank.name} - {self.role}"
@@ -99,14 +99,14 @@ class SME(models.Model):
 
     is_active = models.BooleanField(default=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    
 
     class Meta:
         unique_together = ("bank", "br_number")
 
         indexes = [
             models.Index(fields=["br_number"]),
-            models.Index(fields=["created_at"]),
+           
         ]
 
     def __str__(self):

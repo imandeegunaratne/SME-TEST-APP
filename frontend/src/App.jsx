@@ -8,6 +8,7 @@ import EvaluatorHome from "./pages/EvaluatorHome";
 import SmeRegister from "./pages/SMERegister";
 import SMEReport from "./pages/SMEReport";
 import SMEScore from "./pages/Scoring";
+import BankAdminDashboard from "./pages/BankAdminDashbord"; 
 function App() {
   return (
     <BrowserRouter>
@@ -22,6 +23,7 @@ function App() {
         <Route path="/sme-register" element={<SmeRegister />} />
         <Route path="/smes/:id/report" element={<SMEReport />} />
         <Route path="/smes/:id/score" element={<SMEScore />} />
+        <Route path="/bank-admin-dashboard" element={<BankAdminDashboard />} />
 
 
 

@@ -16,31 +16,42 @@ export default function Login() {
   }
 
   async function onSubmit(e) {
-    e.preventDefault();
-    setErr("");
-    setLoading(true);
+  e.preventDefault();
+  setErr("");
+  setLoading(true);
 
-    try {
-      const res = await fetch("/api/auth/login/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: form.username, password: form.password }),
-        });
+  try {
+    const res = await fetch("/api/auth/login/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.username,
+        password: form.password,
+      }),
+    });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "Login failed.");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Login failed.");
 
-      localStorage.setItem("access", data.access);
-      localStorage.setItem("refresh", data.refresh);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("username", data.username);
+    localStorage.setItem("role", data.role);
+    localStorage.setItem("bank_name", data.bank_name);
+    localStorage.setItem("bank_code", data.bank_code);
 
-      navigate("/"); 
-    } catch (e2) {
-      setErr(e2.message);
-    } finally {
-      setLoading(false);
+    if (data.role !== "BANK_ADMIN") {
+      localStorage.clear();
+      throw new Error("This account is not a bank admin.");
     }
-  }
 
+    navigate("/bank-admin-dashboard");
+
+  } catch (e2) {
+    setErr(e2.message);
+  } finally {
+    setLoading(false);
+  }
+}
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
       

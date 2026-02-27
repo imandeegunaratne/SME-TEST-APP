@@ -5,7 +5,9 @@ import logo from "../assets/logo.png";
 
 export default function EvaluatorLanding() {
   const navigate = useNavigate();
-  const username = localStorage.getItem("username") || "";
+
+  const token = localStorage.getItem("token");
+  const role = localStorage.getItem("role");
 
   /* ================= THEME ================= */
   const [themeMode] = useState(() => {
@@ -37,19 +39,36 @@ export default function EvaluatorLanding() {
   const [found, setFound] = useState(null);
   const [searchMsg, setSearchMsg] = useState("");
 
+  function authHeaders() {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    };
+  }
+
   /* ================= LOAD DATA ================= */
   async function loadData() {
     setLoading(true);
     setErr("");
 
+    // ✅ Basic guard
+    if (!token) {
+      setErr("You are not logged in.");
+      setLoading(false);
+      navigate("/login");
+      return;
+    }
+
+    // ✅ Optional guard: prevent bank admin from entering evaluator page
+    if (role === "BANK_ADMIN") {
+      navigate("/bank-admin-dashboard");
+      return;
+    }
+
     try {
       const [s1, s2] = await Promise.all([
-        fetch("/api/evaluator/summary/", {
-          headers: { "X-Username": username },
-        }),
-        fetch("/api/evaluator/smes/", {
-          headers: { "X-Username": username },
-        }),
+        fetch("/api/evaluator/summary/", { headers: authHeaders() }),
+        fetch("/api/evaluator/smes/", { headers: authHeaders() }),
       ]);
 
       const sum = await s1.json().catch(() => ({}));
@@ -61,6 +80,12 @@ export default function EvaluatorLanding() {
       setSummary(sum);
       setSmes(Array.isArray(list) ? list : []);
     } catch (e) {
+      // If token invalid/expired, backend returns 401
+      if (String(e.message).includes("401")) {
+        localStorage.clear();
+        navigate("/login");
+        return;
+      }
       setErr(e.message);
     } finally {
       setLoading(false);
@@ -69,6 +94,7 @@ export default function EvaluatorLanding() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ================= SEARCH SME ================= */
@@ -81,13 +107,10 @@ export default function EvaluatorLanding() {
     try {
       const res = await fetch(
         `/api/smes/by-br/?br=${encodeURIComponent(brSearch)}`,
-        {
-          headers: { "X-Username": username },
-        }
+        { headers: authHeaders() }
       );
 
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) throw new Error(data.detail || "SME not found.");
 
       setFound(data);
@@ -101,7 +124,6 @@ export default function EvaluatorLanding() {
   /* ================= RENDER ================= */
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-
       {/* NAVBAR */}
       <header style={{ ...styles.navbar, background: theme.navBg }}>
         <div style={styles.brand} onClick={() => navigate("/")}>
@@ -117,6 +139,7 @@ export default function EvaluatorLanding() {
             style={{
               ...styles.tabBtn,
               background: active === "scoring" ? theme.tabActiveBg : "transparent",
+              color: theme.text,
             }}
             onClick={() => setActive("scoring")}
           >
@@ -127,6 +150,7 @@ export default function EvaluatorLanding() {
             style={{
               ...styles.tabBtn,
               background: active === "dashboard" ? theme.tabActiveBg : "transparent",
+              color: theme.text,
             }}
             onClick={() => setActive("dashboard")}
           >
@@ -136,7 +160,6 @@ export default function EvaluatorLanding() {
       </header>
 
       <main style={styles.main}>
-
         {err && <div style={{ color: "red" }}>{err}</div>}
 
         {/* ================= SCORING TAB ================= */}
@@ -154,13 +177,7 @@ export default function EvaluatorLanding() {
             </section>
 
             {/* SEARCH CARD */}
-            <section
-              style={{
-                ...styles.card,
-                background: theme.card,
-                marginTop: 16,
-              }}
-            >
+            <section style={{ ...styles.card, background: theme.card, marginTop: 16 }}>
               <h3>Search & Score SME</h3>
 
               <div style={{ display: "flex", gap: 10 }}>
@@ -172,7 +189,7 @@ export default function EvaluatorLanding() {
                 />
 
                 <button
-                  style={{ ...styles.smallBtn, background: theme.button }}
+                  style={{ ...styles.smallBtn, background: theme.button, color: "#fff", border: "none" }}
                   onClick={searchByBR}
                 >
                   Search
@@ -185,18 +202,14 @@ export default function EvaluatorLanding() {
                 <div style={{ ...styles.row, marginTop: 14 }}>
                   <div>
                     <b>{found.name}</b>
-                    <div style={{ fontSize: 12 }}>
-                      BR: {found.br_number}
-                    </div>
+                    <div style={{ fontSize: 12 }}>BR: {found.br_number}</div>
                   </div>
 
                   <div style={{ display: "flex", gap: 10 }}>
                     {!found.is_scored && (
                       <button
-                        style={{ ...styles.smallBtn, background: theme.button }}
-                        onClick={() =>
-                          navigate(`/smes/${found.id}/score`)
-                        }
+                        style={{ ...styles.smallBtn, background: theme.button, color: "#fff", border: "none" }}
+                        onClick={() => navigate(`/smes/${found.id}/score`)}
                       >
                         Start Scoring
                       </button>
@@ -205,9 +218,7 @@ export default function EvaluatorLanding() {
                     {found.is_scored && (
                       <button
                         style={styles.smallBtn}
-                        onClick={() =>
-                          navigate(`/smes/${found.id}/report`)
-                        }
+                        onClick={() => navigate(`/smes/${found.id}/report`)}
                       >
                         View Report
                       </button>
