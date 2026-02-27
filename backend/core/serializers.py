@@ -1,6 +1,9 @@
+# backend/core/serializers.py
+
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import SME,Bank,Profile
+
+from .models import SME, Bank, Profile
 
 
 class SMECreateSerializer(serializers.ModelSerializer):
@@ -18,7 +21,8 @@ class SMECreateSerializer(serializers.ModelSerializer):
 class SMEListSerializer(serializers.ModelSerializer):
     class Meta:
         model = SME
-        fields = ["id", "name", "br_number", "industry", "is_scored", "total_score", "created_at"]
+        # ✅ removed created_at to avoid FieldError if model doesn't have it
+        fields = ["id", "name", "br_number", "industry", "is_scored", "total_score"]
 
 
 class EvaluatorSignupSerializer(serializers.Serializer):
@@ -30,7 +34,16 @@ class EvaluatorSignupSerializer(serializers.Serializer):
 
     bank_code = serializers.CharField()
 
+    def validate_username(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Username is required.")
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
     def validate_bank_code(self, value):
+        value = (value or "").strip()
         if not Bank.objects.filter(code=value).exists():
             raise serializers.ValidationError("Invalid bank code.")
         return value

@@ -1,3 +1,4 @@
+// frontend/src/pages/Scoring.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -36,7 +37,8 @@ function bandKey(score) {
 export default function RubricScoringPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const username = localStorage.getItem("username") || "";
+
+  const token = localStorage.getItem("token") || "";
 
   const [sme, setSme] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -44,20 +46,24 @@ export default function RubricScoringPage() {
   const [saving, setSaving] = useState(false);
 
   const [scores, setScores] = useState(() =>
-    Object.fromEntries(rubric.map(r => [r.code, { score: null, notes: "", followup: false }]))
+    Object.fromEntries(
+      rubric.map((r) => [r.code, { score: null, notes: "", followup: false }])
+    )
   );
 
   const cardRefs = useRef({});
 
   const progress = useMemo(() => {
-    const scored = Object.values(scores).filter(v => typeof v.score === "number").length;
+    const scored = Object.values(scores).filter((v) => typeof v.score === "number").length;
     return { scored, total: rubric.length };
   }, [scores]);
 
   const overall = useMemo(() => {
-    const vals = Object.values(scores).map(v => v.score).filter(s => typeof s === "number");
+    const vals = Object.values(scores)
+      .map((v) => v.score)
+      .filter((s) => typeof s === "number");
     if (!vals.length) return null;
-    return Math.round((vals.reduce((a,b)=>a+b,0) / vals.length) * 10) / 10;
+    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
   }, [scores]);
 
   const scrollTo = (code) => {
@@ -66,14 +72,19 @@ export default function RubricScoringPage() {
   };
 
   const setScore = (code, newScore) => {
-    setScores(prev => ({
+    setScores((prev) => ({
       ...prev,
       [code]: { ...prev[code], score: newScore },
     }));
-    // TODO: debounce autosave PATCH here
   };
 
   useEffect(() => {
+    // If not logged in, go to login
+    if (!token) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
     // Load any local draft
     try {
       const raw = localStorage.getItem(`draft_scores_${id}`);
@@ -90,38 +101,67 @@ export default function RubricScoringPage() {
       setError("");
       try {
         const res = await fetch(`/api/smes/${id}/report/`, {
-          headers: { "X-Username": username },
+          headers: { Authorization: `Token ${token}` },
         });
         const data = await res.json().catch(() => ({}));
+
+        // Token invalid/expired
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          navigate("/login", { replace: true });
+          return;
+        }
+
         if (!res.ok) throw new Error(data.detail || "Failed to load SME.");
         setSme(data);
       } catch (e) {
-        setError(e.message);
+        setError(e.message || "Failed to load SME.");
       } finally {
         setLoading(false);
       }
     }
+
     load();
-  }, [id, username]);
+  }, [id, token, navigate]);
 
   async function submitFinal() {
     if (overall == null) return;
+
+    if (!token) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
     setSaving(true);
     setError("");
+
     try {
       const res = await fetch(`/api/smes/${id}/score/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Username": username,
+          Authorization: `Token ${token}`,
         },
         body: JSON.stringify({ total_score: overall }),
       });
+
       const data = await res.json().catch(() => ({}));
+
+      // Token invalid/expired
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        navigate("/login", { replace: true });
+        return;
+      }
+
       if (!res.ok) throw new Error(data.detail || "Failed to save score.");
+
+      // Optional: clear draft after successful submit
+      localStorage.removeItem(`draft_scores_${id}`);
+
       navigate(`/smes/${id}/report`);
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Failed to save score.");
     } finally {
       setSaving(false);
     }
@@ -140,16 +180,25 @@ export default function RubricScoringPage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="text-sm text-gray-600">
-              Progress: <span className="font-semibold">{progress.scored}/{progress.total}</span>
+              Progress:{" "}
+              <span className="font-semibold">
+                {progress.scored}/{progress.total}
+              </span>
             </div>
             <button
               className="px-3 py-2 rounded-lg border bg-white"
-              onClick={() => localStorage.setItem(`draft_scores_${id}`, JSON.stringify(scores))}
+              onClick={() =>
+                localStorage.setItem(`draft_scores_${id}`, JSON.stringify(scores))
+              }
             >
               Save draft
             </button>
             <button
-              className={`px-3 py-2 rounded-lg text-white ${progress.scored === progress.total ? "bg-slate-900" : "bg-gray-400 cursor-not-allowed"}`}
+              className={`px-3 py-2 rounded-lg text-white ${
+                progress.scored === progress.total
+                  ? "bg-slate-900"
+                  : "bg-gray-400 cursor-not-allowed"
+              }`}
               disabled={progress.scored !== progress.total || saving}
               onClick={submitFinal}
             >
@@ -166,13 +215,14 @@ export default function RubricScoringPage() {
             {error}
           </div>
         )}
+
         {/* Sidebar */}
         <aside className="col-span-12 md:col-span-4 lg:col-span-3">
           <div className="sticky top-20 space-y-3">
             <div className="bg-white border rounded-xl p-4">
               <div className="font-semibold mb-3">Criteria</div>
               <div className="space-y-2">
-                {rubric.map(r => {
+                {rubric.map((r) => {
                   const val = scores[r.code]?.score;
                   const done = typeof val === "number";
                   return (
@@ -186,7 +236,11 @@ export default function RubricScoringPage() {
                         <div className="text-xs text-gray-600">{r.title}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-1 rounded-full ${done ? "bg-green-100" : "bg-gray-100"}`}>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            done ? "bg-green-100" : "bg-gray-100"
+                          }`}
+                        >
                           {done ? val : "—"}
                         </span>
                         <span>{done ? "✅" : "⏳"}</span>
@@ -200,14 +254,16 @@ export default function RubricScoringPage() {
             <div className="bg-white border rounded-xl p-4">
               <div className="text-sm text-gray-600">Overall</div>
               <div className="text-2xl font-bold">{overall ?? "—"}</div>
-              <div className="text-xs text-gray-500 mt-1">Average of scored criteria</div>
+              <div className="text-xs text-gray-500 mt-1">
+                Average of scored criteria
+              </div>
             </div>
           </div>
         </aside>
 
         {/* Cards */}
         <main className="col-span-12 md:col-span-8 lg:col-span-9 space-y-4">
-          {rubric.map(r => {
+          {rubric.map((r) => {
             const current = scores[r.code];
             const score = current.score;
             const key = typeof score === "number" ? bandKey(score) : null;
@@ -238,7 +294,12 @@ export default function RubricScoringPage() {
                       min={1}
                       max={10}
                       value={score ?? ""}
-                      onChange={(e) => setScore(r.code, e.target.value === "" ? null : Number(e.target.value))}
+                      onChange={(e) =>
+                        setScore(
+                          r.code,
+                          e.target.value === "" ? null : Number(e.target.value)
+                        )
+                      }
                       className="w-20 border rounded-lg px-2 py-1"
                       placeholder="—"
                     />
@@ -247,12 +308,16 @@ export default function RubricScoringPage() {
 
                 {/* Band quick select */}
                 <div className="mt-4 grid grid-cols-5 gap-2">
-                  {bands.map(b => (
+                  {bands.map((b) => (
                     <button
                       key={b.label}
                       onClick={() => setScore(r.code, b.min)}
                       className={`px-2 py-2 rounded-lg border text-xs ${
-                        typeof score === "number" && score >= b.min && score <= b.max ? "bg-black text-white" : "bg-white hover:bg-gray-50"
+                        typeof score === "number" &&
+                        score >= b.min &&
+                        score <= b.max
+                          ? "bg-black text-white"
+                          : "bg-white hover:bg-gray-50"
                       }`}
                     >
                       {b.label}
@@ -265,9 +330,7 @@ export default function RubricScoringPage() {
                   <div className="text-sm font-semibold mb-1">
                     {key ? `Selected band: ${key}` : "Select a score to see rubric guidance"}
                   </div>
-                  <div className="text-sm text-gray-700">
-                    {key ? r.desc[key] : "—"}
-                  </div>
+                  <div className="text-sm text-gray-700">{key ? r.desc[key] : "—"}</div>
                 </div>
 
                 {/* Notes */}
@@ -277,7 +340,10 @@ export default function RubricScoringPage() {
                     placeholder="Evidence / notes (optional but recommended)"
                     value={current.notes}
                     onChange={(e) =>
-                      setScores(prev => ({ ...prev, [r.code]: { ...prev[r.code], notes: e.target.value } }))
+                      setScores((prev) => ({
+                        ...prev,
+                        [r.code]: { ...prev[r.code], notes: e.target.value },
+                      }))
                     }
                   />
                   <label className="flex items-center gap-2 text-sm">
@@ -285,7 +351,10 @@ export default function RubricScoringPage() {
                       type="checkbox"
                       checked={current.followup}
                       onChange={(e) =>
-                        setScores(prev => ({ ...prev, [r.code]: { ...prev[r.code], followup: e.target.checked } }))
+                        setScores((prev) => ({
+                          ...prev,
+                          [r.code]: { ...prev[r.code], followup: e.target.checked },
+                        }))
                       }
                     />
                     Need follow-up info

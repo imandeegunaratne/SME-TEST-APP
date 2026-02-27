@@ -31,3 +31,15 @@ class IsApprovedUser(BasePermission):
             return p.is_active and p.is_approved
 
         return False
+
+
+class IsEvaluator(BasePermission):
+    """
+    Only approved/active evaluators.
+    """
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u and u.is_authenticated and hasattr(u, "profile")):
+            return False
+        p = u.profile
+        return bool(p.role == "EVALUATOR" and p.is_active and p.is_approved)

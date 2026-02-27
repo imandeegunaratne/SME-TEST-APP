@@ -32,46 +32,51 @@ export default function SmeRegister() {
   }
 
   async function onSubmit(e) {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const username = localStorage.getItem("username");
+  try {
+    const token = localStorage.getItem("token");
 
-      const res = await fetch("/api/smes/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Username": username,
-        },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (res.status === 409) {
-        setModal({ type: "error", message: data.detail });
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error(data.detail || "Failed to register SME.");
-      }
-
-      setModal({
-        type: "success",
-        message: "SME registered successfully!",
-      });
-
-      setTimeout(() => {
-  navigate("/evaluator-home");
-}, 1000);
-    } catch (err) {
-      setModal({ type: "error", message: err.message });
-    } finally {
-      setLoading(false);
+    if (!token) {
+      throw new Error("You are not logged in.");
     }
+
+    const res = await fetch("/api/smes/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${token}`,
+      },
+      body: JSON.stringify(form),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 409) {
+      setModal({ type: "error", message: data.detail });
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to register SME.");
+    }
+
+    setModal({
+      type: "success",
+      message: "SME registered successfully!",
+    });
+
+    setTimeout(() => {
+      navigate("/evaluator-home");
+    }, 1000);
+
+  } catch (err) {
+    setModal({ type: "error", message: err.message });
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <div style={{ minHeight: "100vh", background: theme.bg, color: theme.text }}>

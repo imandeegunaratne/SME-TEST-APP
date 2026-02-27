@@ -1,24 +1,17 @@
-import json
+# backend/core/views.py
 
-from django.http import JsonResponse
 from django.contrib.auth import authenticate
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.models import User
 
+from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 
 from .models import Profile, SME
-from .serializers import (
-    SMECreateSerializer,
-    SMEListSerializer,
-    EvaluatorSignupSerializer,
-)
-from .permission import IsBankAdmin
+from .serializers import SMEListSerializer, EvaluatorSignupSerializer
+from .permission import IsBankAdmin, IsApprovedUser
 
 
 # ==========================
@@ -30,91 +23,49 @@ def health(request):
 
 
 # ==========================
-# Helpers (your current auth style for evaluator endpoints)
+# Helpers (Token-based auth)
 # ==========================
-def _get_username_from_request(request):
+def _get_evaluator_profile_or_403(request):
     """
-    Your current frontend sends evaluator username in:
-      - Header: X-Username
-      - or Body: { "username": "..." }
-
-    (Not secure for production, but kept for compatibility.)
+    Token-based evaluator guard:
+    - must be authenticated
+    - must have profile
+    - must be evaluator
+    - must be approved + active
+    Returns (profile, None) if ok; otherwise (None, Response)
     """
-    u = (request.headers.get("X-Username") or "").strip()
-    if u:
-        return u
-
-    try:
-        return (request.data.get("username") or "").strip()
-    except Exception:
-        return ""
-
-
-def _get_profile_or_401(request):
-    """
-    Returns (profile, None) if valid.
-    Returns (None, Response(...)) if invalid.
-    Enforces:
-      - must be an evaluator profile
-      - must be approved + active
-    """
-    username = _get_username_from_request(request)
-    if not username:
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated and hasattr(user, "profile")):
         return None, Response(
-            {"detail": "Missing evaluator username."},
-            status=status.HTTP_401_UNAUTHORIZED
+            {"detail": "Authentication credentials were not provided."},
+            status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    user = User.objects.filter(username=username).first()
-    if not user:
-        return None, Response({"detail": "Invalid user."}, status=status.HTTP_401_UNAUTHORIZED)
+    profile = user.profile
 
-    profile = Profile.objects.filter(user=user, role="EVALUATOR").select_related("bank").first()
-    if not profile:
-        return None, Response({"detail": "Evaluator profile not found."}, status=status.HTTP_401_UNAUTHORIZED)
+    if profile.role != "EVALUATOR":
+        return None, Response(
+            {"detail": "Evaluator access required."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not profile.is_approved:
-        return None, Response({"detail": "Pending bank admin approval."}, status=status.HTTP_403_FORBIDDEN)
+        return None, Response(
+            {"detail": "Pending bank admin approval."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     if not profile.is_active:
-        return None, Response({"detail": "Account disabled. Contact bank admin."}, status=status.HTTP_403_FORBIDDEN)
+        return None, Response(
+            {"detail": "Account disabled. Contact bank admin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     return profile, None
 
 
 # ==========================
-# OLD login (kept for compatibility)
-# ==========================
-@csrf_exempt
-def login_view(request):
-    """
-    OLD SIMPLE LOGIN:
-    Returns username only (no token).
-    You can delete later after frontend moves to Token login.
-    """
-    if request.method != "POST":
-        return JsonResponse({"detail": "Only POST method allowed"}, status=405)
-
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({"detail": "Invalid JSON"}, status=400)
-
-    username = data.get("username")
-    password = data.get("password")
-
-    if not username or not password:
-        return JsonResponse({"detail": "Username and password required"}, status=400)
-
-    user = authenticate(username=username, password=password)
-    if user is None:
-        return JsonResponse({"detail": "Invalid username or password"}, status=400)
-
-    return JsonResponse({"message": "Login successful", "username": user.username})
-
-
-# ==========================
-# NEW: Evaluator Signup (always creates pending evaluator)
+# Evaluator Signup (creates pending evaluator)
 # ==========================
 class EvaluatorSignupView(APIView):
     permission_classes = [AllowAny]
@@ -123,15 +74,14 @@ class EvaluatorSignupView(APIView):
         ser = EvaluatorSignupSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         ser.save()
-
         return Response(
             {"detail": "Account created. Waiting for bank admin approval."},
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
 
 # ==========================
-# NEW: Secure Login (Token + approval checks)
+# Secure Login (Token + approval checks)
 # ==========================
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -149,7 +99,7 @@ class LoginView(APIView):
 
         p = user.profile
 
-        # Block evaluator until approved
+        # Block evaluator until approved/active
         if p.role == "EVALUATOR":
             if not p.is_approved:
                 return Response({"detail": "Pending bank admin approval."}, status=status.HTTP_403_FORBIDDEN)
@@ -162,13 +112,16 @@ class LoginView(APIView):
 
         token, _ = Token.objects.get_or_create(user=user)
 
-        return Response({
-            "token": token.key,
-            "role": p.role,
-            "bank_code": p.bank.code,
-            "bank_name": p.bank.name,
-            "username": user.username,
-        })
+        return Response(
+            {
+                "token": token.key,
+                "role": p.role,
+                "bank_code": p.bank.code if p.bank else None,
+                "bank_name": p.bank.name if p.bank else None,
+                "username": user.username,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # ==========================
@@ -180,15 +133,14 @@ class PendingEvaluatorsView(APIView):
     def get(self, request):
         bank = request.user.profile.bank
 
-        pending = Profile.objects.filter(
-            bank=bank,
-            role="EVALUATOR",
-            is_approved=False
-        ).select_related("user").order_by("-id")  # ✅ no created_at
+        pending = (
+            Profile.objects.filter(bank=bank, role="EVALUATOR", is_approved=False)
+            .select_related("user")
+            .order_by("-id")
+        )
 
-        data = []
-        for p in pending:
-            data.append({
+        data = [
+            {
                 "profile_id": p.id,
                 "user_id": p.user.id,
                 "username": p.user.username,
@@ -197,7 +149,9 @@ class PendingEvaluatorsView(APIView):
                 "email": p.user.email,
                 "is_active": p.is_active,
                 "is_approved": p.is_approved,
-            })
+            }
+            for p in pending
+        ]
 
         return Response(data, status=status.HTTP_200_OK)
 
@@ -215,7 +169,7 @@ class ApproveEvaluatorView(APIView):
             p = Profile.objects.select_related("user").get(
                 id=profile_id,
                 bank=bank,
-                role="EVALUATOR"
+                role="EVALUATOR",
             )
         except Profile.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -228,26 +182,29 @@ class ApproveEvaluatorView(APIView):
 
 
 # ==========================
-# SME APIs (your existing endpoints)
+# SME APIs
 # ==========================
 class SMEByBRView(APIView):
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
     def get(self, request):
         br = request.GET.get("br")
-        profile, err = _get_profile_or_401(request)
+
+        profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
         if not br:
             return Response({"detail": "BR number required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        evaluator = profile.user
+        evaluator_user = profile.user
 
         try:
             sme = SME.objects.get(br_number=br, bank=profile.bank)
         except SME.DoesNotExist:
             return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        is_editable = bool(sme.is_scored and sme.scored_by == evaluator)
+        is_editable = bool(sme.is_scored and sme.scored_by == evaluator_user)
 
         data = {
             "id": sme.id,
@@ -267,12 +224,14 @@ class EvaluatorSMEsView(APIView):
     GET /api/evaluator/smes/
     Returns SMEs for evaluator's bank
     """
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
     def get(self, request):
-        profile, err = _get_profile_or_401(request)
+        profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
-        smes = SME.objects.filter(bank=profile.bank).order_by("-id")  # ✅ no created_at
+        smes = SME.objects.filter(bank=profile.bank).order_by("-id")
         return Response(SMEListSerializer(smes, many=True).data, status=status.HTTP_200_OK)
 
 
@@ -281,8 +240,10 @@ class EvaluatorSummaryView(APIView):
     GET /api/evaluator/summary/
     Summary for evaluator's bank
     """
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
     def get(self, request):
-        profile, err = _get_profile_or_401(request)
+        profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
@@ -303,13 +264,18 @@ class EvaluatorSummaryView(APIView):
                 "pending_smes": pending,
                 "avg_score": avg,
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
 
 class SMECreateView(APIView):
+    """
+    POST /api/smes/  (or /api/smes/create/ depending on urls)
+    """
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
     def post(self, request):
-        profile, err = _get_profile_or_401(request)
+        profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
@@ -328,7 +294,7 @@ class SMECreateView(APIView):
             br_number=br,
             industry=industry,
             bank=profile.bank,
-            evaluator=profile.user
+            evaluator=profile.user,
         )
 
         return Response(
@@ -352,8 +318,10 @@ class SMEScoreUpdateView(APIView):
     - First score: any evaluator from the same bank can score.
     - Re-score/edit: only the evaluator who scored it can edit.
     """
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
     def post(self, request, pk):
-        profile, err = _get_profile_or_401(request)
+        profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
@@ -365,7 +333,7 @@ class SMEScoreUpdateView(APIView):
         if sme.is_scored and sme.scored_by and sme.scored_by != profile.user:
             return Response(
                 {"detail": "This SME was already scored by another evaluator."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         try:
@@ -389,5 +357,5 @@ class SMEScoreUpdateView(APIView):
                 "is_scored": sme.is_scored,
                 "scored_by": sme.scored_by.username if sme.scored_by else None,
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )

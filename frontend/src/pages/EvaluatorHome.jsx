@@ -1,12 +1,11 @@
-// src/pages/EvaluatorLanding.jsx
+// src/pages/EvaluatorHome.jsx (or EvaluatorLanding.jsx)
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
-export default function EvaluatorLanding() {
+export default function EvaluatorHome() {
+  
   const navigate = useNavigate();
-
-  const token = localStorage.getItem("token");
   const role = localStorage.getItem("role");
 
   /* ================= THEME ================= */
@@ -39,10 +38,11 @@ export default function EvaluatorLanding() {
   const [found, setFound] = useState(null);
   const [searchMsg, setSearchMsg] = useState("");
 
+  // ✅ Always read token fresh (prevents stale/empty token issues)
   function authHeaders() {
+    const tokenNow = localStorage.getItem("token");
     return {
-      "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
+      Authorization: `Token ${tokenNow}`,
     };
   }
 
@@ -51,15 +51,17 @@ export default function EvaluatorLanding() {
     setLoading(true);
     setErr("");
 
+    const tokenNow = localStorage.getItem("token");
+
     // ✅ Basic guard
-    if (!token) {
+    if (!tokenNow) {
       setErr("You are not logged in.");
       setLoading(false);
       navigate("/login");
       return;
     }
 
-    // ✅ Optional guard: prevent bank admin from entering evaluator page
+    // ✅ Prevent bank admin from entering evaluator page
     if (role === "BANK_ADMIN") {
       navigate("/bank-admin-dashboard");
       return;
@@ -71,6 +73,8 @@ export default function EvaluatorLanding() {
         fetch("/api/evaluator/smes/", { headers: authHeaders() }),
       ]);
 
+    
+
       const sum = await s1.json().catch(() => ({}));
       const list = await s2.json().catch(() => []);
 
@@ -80,13 +84,7 @@ export default function EvaluatorLanding() {
       setSummary(sum);
       setSmes(Array.isArray(list) ? list : []);
     } catch (e) {
-      // If token invalid/expired, backend returns 401
-      if (String(e.message).includes("401")) {
-        localStorage.clear();
-        navigate("/login");
-        return;
-      }
-      setErr(e.message);
+      setErr(e.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -99,6 +97,16 @@ export default function EvaluatorLanding() {
 
   /* ================= SEARCH SME ================= */
   async function searchByBR() {
+    setSearchMsg("");
+    setFound(null);
+
+    const tokenNow = localStorage.getItem("token");
+    if (!tokenNow) {
+      setSearchMsg("You are not logged in.");
+      navigate("/login");
+      return;
+    }
+
     if (!brSearch.trim()) {
       setSearchMsg("Please enter a BR number.");
       return;
@@ -110,14 +118,18 @@ export default function EvaluatorLanding() {
         { headers: authHeaders() }
       );
 
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate("/login");
+        return;
+      }
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "SME not found.");
 
       setFound(data);
-      setSearchMsg("");
     } catch (e) {
-      setFound(null);
-      setSearchMsg(e.message);
+      setSearchMsg(e.message || "Search failed.");
     }
   }
 
@@ -160,7 +172,7 @@ export default function EvaluatorLanding() {
       </header>
 
       <main style={styles.main}>
-        {err && <div style={{ color: "red" }}>{err}</div>}
+        {err && <div style={{ color: "red", marginBottom: 12 }}>{err}</div>}
 
         {/* ================= SCORING TAB ================= */}
         {active === "scoring" && (
@@ -189,7 +201,12 @@ export default function EvaluatorLanding() {
                 />
 
                 <button
-                  style={{ ...styles.smallBtn, background: theme.button, color: "#fff", border: "none" }}
+                  style={{
+                    ...styles.smallBtn,
+                    background: theme.button,
+                    color: "#fff",
+                    border: "none",
+                  }}
                   onClick={searchByBR}
                 >
                   Search
@@ -208,7 +225,12 @@ export default function EvaluatorLanding() {
                   <div style={{ display: "flex", gap: 10 }}>
                     {!found.is_scored && (
                       <button
-                        style={{ ...styles.smallBtn, background: theme.button, color: "#fff", border: "none" }}
+                        style={{
+                          ...styles.smallBtn,
+                          background: theme.button,
+                          color: "#fff",
+                          border: "none",
+                        }}
                         onClick={() => navigate(`/smes/${found.id}/score`)}
                       >
                         Start Scoring
@@ -278,31 +300,25 @@ const styles = {
     minHeight: "100vh",
     fontFamily: "system-ui",
   },
-
   navbar: {
     padding: "14px 5%",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   brand: {
     display: "flex",
     alignItems: "center",
     gap: 10,
     cursor: "pointer",
   },
-
   logoImg: {
     width: 80,
     height: 50,
   },
-
   brandTitle: { fontWeight: 900 },
   brandSub: { fontSize: 12 },
-
   centerTabs: { display: "flex", gap: 10 },
-
   tabBtn: {
     padding: "8px 14px",
     borderRadius: 999,
@@ -310,25 +326,21 @@ const styles = {
     cursor: "pointer",
     fontWeight: 700,
   },
-
   main: {
     width: "min(1100px, 92%)",
     margin: "20px auto",
   },
-
   card: {
     padding: 16,
     borderRadius: 16,
     boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
   },
-
   search: {
     padding: 10,
     borderRadius: 10,
     border: "1px solid #ccc",
     flex: 1,
   },
-
   row: {
     padding: 12,
     borderRadius: 12,
@@ -337,7 +349,6 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   primaryBtn: {
     padding: "10px 14px",
     borderRadius: 12,
@@ -345,7 +356,6 @@ const styles = {
     cursor: "pointer",
     color: "#fff",
   },
-
   smallBtn: {
     padding: "8px 12px",
     borderRadius: 10,

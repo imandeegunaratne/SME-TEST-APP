@@ -3,32 +3,68 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Help from "./pages/Help";
-import BankAdminLogin from "./pages/BankAdminLogin";
 import EvaluatorHome from "./pages/EvaluatorHome";
 import SmeRegister from "./pages/SMERegister";
 import SMEReport from "./pages/SMEReport";
 import SMEScore from "./pages/Scoring";
-import BankAdminDashboard from "./pages/BankAdminDashbord"; 
+import BankAdminDashboard from "./pages/BankAdminDashbord";
+
+import ProtectedRoute from "./components/ProtectedRoute";
+
 function App() {
   return (
     <BrowserRouter>
-
       <Routes>
+        {/* public */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/help" element={<Help />} />
-        <Route path="/admin-login" element={<BankAdminLogin />} />
-        <Route path="/evaluator-home" element={<EvaluatorHome />} />
-        <Route path="/sme-register" element={<SmeRegister />} />
-        <Route path="/smes/:id/report" element={<SMEReport />} />
-        <Route path="/smes/:id/score" element={<SMEScore />} />
-        <Route path="/bank-admin-dashboard" element={<BankAdminDashboard />} />
 
+        {/* evaluator */}
+        <Route
+          path="/evaluator-home"
+          element={
+            <ProtectedRoute allowRoles={["EVALUATOR"]}>
+              <EvaluatorHome />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sme-register"
+          element={
+            <ProtectedRoute allowRoles={["EVALUATOR"]}>
+              <SmeRegister />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/smes/:id/report"
+          element={
+            <ProtectedRoute allowRoles={["EVALUATOR"]}>
+              <SMEReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/smes/:id/score"
+          element={
+            <ProtectedRoute allowRoles={["EVALUATOR"]}>
+              <SMEScore />
+            </ProtectedRoute>
+          }
+        />
 
-
+        {/* bank admin */}
+        <Route
+          path="/bank-admin-dashboard"
+          element={
+            <ProtectedRoute allowRoles={["BANK_ADMIN"]}>
+              <BankAdminDashboard />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
-
     </BrowserRouter>
   );
 }
