@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 /* =========================
-   Bands
+   Bands + Rubric (per-criteria)
 ========================= */
 const bands = [
   { key: "1–2", label: "1–2 Very weak", min: 1, max: 2 },
@@ -14,17 +14,11 @@ const bands = [
   { key: "9–10", label: "9–10 Very strong", min: 9, max: 10 },
 ];
 
-/* =========================
-   Rubric + Excel Weights (from your uploaded Excel "Scoring" sheet column C)
-   Normalized = score/10
-   Weighted = weight * normalized
-   Gap = weight * (1 - normalized)
-========================= */
+// ✅ Make sure EACH item has a code (C1..C10)
 const rubric = [
   {
     code: "C1",
     title: "Business opportunity gap",
-    weight: 0.0780563516111449,
     desc: {
       "1–2": "No clear opportunity gap or customer demand",
       "3–4": "Opportunity gap described but unclear; weak demand signs",
@@ -36,34 +30,28 @@ const rubric = [
   {
     code: "C2",
     title: "Customer pains and gains",
-    weight: 0.07915268875862755,
     desc: {
-      "1–2":
-        "No clear identification of customer pains and gains, very similar to others",
-      "3–4":
-        "Some clear identification of customer pains and gains, little differentiation",
-      "5–6":
-        "Clear identification of customer pains and gains, some differentiation",
-      "7–8": "Clearly identification of pains and gains and differentiations",
+      "1–2": "No clear identification of customer pains and gains, very similar to others",
+      "3–4": "Some identification; little differentiation",
+      "5–6": "Clear identification; some differentiation",
+      "7–8": "Clear pains/gains and good differentiations",
       "9–10": "Strong, unique value proposition",
     },
   },
   {
     code: "C3",
-    title: "Intrest to take risk",
-    weight: 0.07717695554997973,
+    title: "Interest to take risk",
     desc: {
       "1–2": "Poor risk taker",
       "3–4": "Somewhat risk taker",
       "5–6": "Moderate risk taker",
       "7–8": "Effective risk taker",
-      "9–10": "Take advantage of risk always",
+      "9–10": "Takes advantage of risk always",
     },
   },
   {
     code: "C4",
     title: "Stakeholder Engagement & Support",
-    weight: 0.0503581556946596,
     desc: {
       "1–2": "Weak or unstable relationships",
       "3–4": "Basic relationships; limited support",
@@ -75,7 +63,6 @@ const rubric = [
   {
     code: "C5",
     title: "Competitive Position",
-    weight: 0.12541568085659088,
     desc: {
       "1–2": "Unaware of competition",
       "3–4": "Knows competitors but reacts late",
@@ -87,7 +74,6 @@ const rubric = [
   {
     code: "C6",
     title: "Management & Workforce Capability",
-    weight: 0.042985571513489466,
     desc: {
       "1–2": "Poor management, role confusion",
       "3–4": "Basic management; skill gaps",
@@ -99,10 +85,9 @@ const rubric = [
   {
     code: "C7",
     title: "Streams of Revenue",
-    weight: 0.18314870314095424,
     desc: {
       "1–2": "Unstable or irregular income",
-      "3–4": "Some income stability but highly dependent",
+      "3–4": "Some stability but highly dependent",
       "5–6": "Reasonably stable income",
       "7–8": "Stable and diversified revenue",
       "9–10": "Strong, growing, and predictable revenue",
@@ -111,7 +96,6 @@ const rubric = [
   {
     code: "C8",
     title: "Cost Control & Efficiency",
-    weight: 0.16476744163849816,
     desc: {
       "1–2": "Costs unclear; poor control",
       "3–4": "Basic cost tracking",
@@ -123,28 +107,23 @@ const rubric = [
   {
     code: "C9",
     title: "Taking advantage of state assistance",
-    weight: 0.09499841137039716,
     desc: {
       "1–2": "No engagement of state",
       "3–4": "Some engagement of state",
       "5–6": "Some use of state support programs",
       "7–8": "Active use of state institutions/networks",
-      "9–10": "Use state as strategic institutional leverage",
+      "9–10": "Uses state as strategic institutional leverage",
     },
   },
   {
     code: "C10",
     title: "Operational Readiness",
-    weight: 0.1039400398656582,
     desc: {
-      "1–2":
-        "Lacks basic facilities or equipment; frequent operational disruptions",
-      "3–4":
-        "Basic resources exist but often inadequate; disruptions occur",
-      "5–6": "Adequate resources to run daily operations with minor issues",
-      "7–8": "Sufficient resources; operations run smoothly with basic backups",
-      "9–10":
-        "Strong operational resources; smooth, reliable operations with adequate backups",
+      "1–2": "Lacks basic facilities or equipment; frequent disruptions",
+      "3–4": "Basic resources but often inadequate",
+      "5–6": "Adequate resources with minor issues",
+      "7–8": "Smooth operations with basic backups",
+      "9–10": "Strong resources; reliable operations with backups",
     },
   },
 ];
@@ -165,50 +144,14 @@ function clampScore(n) {
 }
 
 function scoreForBand(b) {
-  // midpoint (recommended)
   return Math.round((b.min + b.max) / 2);
-}
-
-function computeExcelOutputs(scoresByCode) {
-  // Excel logic:
-  // normalized = score/10
-  // weighted = weight * normalized
-  // gap = weight * (1 - normalized)
-  const rows = rubric.map((r) => {
-    const rawScore = scoresByCode[r.code]?.score;
-    const score = typeof rawScore === "number" ? rawScore : null;
-    const normalized = score == null ? null : score / 10;
-    const weighted = normalized == null ? null : r.weight * normalized;
-    const gap = normalized == null ? null : r.weight * (1 - normalized);
-
-    return {
-      code: r.code,
-      title: r.title,
-      weight: r.weight,
-      score,
-      normalized,
-      weighted,
-      gap,
-    };
-  });
-
-  const weightedSum = rows.reduce((acc, row) => acc + (row.weighted ?? 0), 0);
-  const capability = Math.round(weightedSum * 100) / 100; // ROUND(...,2) like Excel
-
-  // Weakness explorer: rank by GAP desc (highest gap = biggest weakness)
-  const weaknesses = rows
-    .filter((r) => typeof r.gap === "number" && r.gap > 0)
-    .slice()
-    .sort((a, b) => (b.gap ?? 0) - (a.gap ?? 0))
-    .map((r, idx) => ({ ...r, rank: idx + 1 }));
-
-  return { rows, capability, weaknesses };
 }
 
 /* =========================
    Theme (match Landing UI)
 ========================= */
 const BRAND = "#2F96B4";
+
 const darkTheme = {
   bg: "#0B1220",
   navBg: "rgba(11,18,32,0.75)",
@@ -223,6 +166,7 @@ const darkTheme = {
   heroGlow:
     "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.25), transparent 65%)",
 };
+
 const lightTheme = {
   bg: "#F4F8FB",
   navBg: "rgba(244,248,251,0.75)",
@@ -242,6 +186,9 @@ export default function RubricScoringPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
+  const token = localStorage.getItem("token") || "";
+
+  // Persist theme
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved ? saved === "dark" : true;
@@ -254,16 +201,16 @@ export default function RubricScoringPage() {
 
   const theme = dark ? darkTheme : lightTheme;
 
-  const token = localStorage.getItem("token") || "";
-
   const [sme, setSme] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [activeIdx, setActiveIdx] = useState(0);
-  const cardRef = useRef(null);
+  // ✅ one criterion at a time
+  const [activeIndex, setActiveIndex] = useState(0);
 
+  // scores state
   const [scores, setScores] = useState(() =>
     Object.fromEntries(
       rubric.map((r) => [r.code, { score: null, notes: "", followup: false }])
@@ -277,9 +224,13 @@ export default function RubricScoringPage() {
     return { scored, total: rubric.length };
   }, [scores]);
 
-  const allDone = progress.scored === progress.total;
+  const cardRef = useRef(null);
 
-  const { capability } = useMemo(() => computeExcelOutputs(scores), [scores]);
+  const activeCriterion = rubric[activeIndex];
+  const active = scores[activeCriterion.code];
+  const activeScore = active?.score;
+  const selectedBandKey =
+    typeof activeScore === "number" ? bandKeyFromScore(activeScore) : null;
 
   const setScore = (code, newScore) => {
     setScores((prev) => ({
@@ -292,85 +243,135 @@ export default function RubricScoringPage() {
 
   const goToIndex = (idx) => {
     const safe = Math.max(0, Math.min(rubric.length - 1, idx));
-    setActiveIdx(safe);
-    requestAnimationFrame(() => {
+    setActiveIndex(safe);
+    // small UX: scroll to top of card area
+    setTimeout(() => {
       cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    }, 0);
   };
 
-  const goNext = () => goToIndex(activeIdx + 1);
-  const goPrev = () => goToIndex(activeIdx - 1);
-
+  // =========================
+  // Load SME + load saved criterion scores from backend
+  // =========================
   useEffect(() => {
     if (!token) {
       navigate("/login", { replace: true });
       return;
     }
 
-    // Load local draft
-    try {
-      const raw = localStorage.getItem(`draft_scores_${id}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") setScores(parsed);
-      }
-    } catch {}
-
-    async function load() {
+    async function loadAll() {
       setLoading(true);
       setError("");
+
       try {
-        const res = await fetch(`/api/smes/${id}/report/`, {
+        // 1) SME report data (you already have this endpoint)
+        const smeRes = await fetch(`/api/smes/${id}/report/`, {
           headers: { Authorization: `Token ${token}` },
         });
-        const data = await res.json().catch(() => ({}));
+        const smeData = await smeRes.json().catch(() => ({}));
 
-        if (res.status === 401) {
+        if (smeRes.status === 401) {
           localStorage.removeItem("token");
           navigate("/login", { replace: true });
           return;
         }
+        if (!smeRes.ok) throw new Error(smeData.detail || "Failed to load SME.");
+        setSme(smeData);
 
-        if (!res.ok) throw new Error(data.detail || "Failed to load SME.");
-        setSme(data);
+        // 2) load saved criterion scores (NEW endpoint)
+        const csRes = await fetch(`/api/smes/${id}/criterion-scores/`, {
+          headers: { Authorization: `Token ${token}` },
+        });
+
+        if (csRes.ok) {
+          const csData = await csRes.json().catch(() => ({}));
+          if (csData?.scores?.length) {
+            setScores((prev) => {
+              const next = { ...prev };
+              for (const row of csData.scores) {
+                if (!row?.code) continue;
+                if (!(row.code in next)) continue;
+                next[row.code] = {
+                  score: typeof row.score === "number" ? row.score : row.score ?? null,
+                  notes: row.notes ?? "",
+                  followup: !!row.followup,
+                };
+              }
+              return next;
+            });
+          }
+        }
       } catch (e) {
-        setError(e.message || "Failed to load SME.");
+        setError(e.message || "Failed to load data.");
       } finally {
         setLoading(false);
       }
     }
 
-    load();
+    loadAll();
   }, [id, token, navigate]);
 
-  async function submitFinal() {
-    if (!allDone) return;
+  // =========================
+  // Save draft to backend
+  // =========================
+  async function saveDraftToBackend() {
+    if (!token) return;
 
-    if (!token) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    setSaving(true);
+    setSavingDraft(true);
     setError("");
 
-    const computed = computeExcelOutputs(scores);
-
     try {
-      // Save to backend (keeps your existing endpoint)
-      // NOTE: Excel capability score is 0..1 (rounded to 2 decimals)
-      const res = await fetch(`/api/smes/${id}/score/`, {
+      const payload = rubric.map((r) => ({
+        code: r.code,
+        score: scores[r.code]?.score ?? null,
+        notes: scores[r.code]?.notes ?? "",
+        followup: !!scores[r.code]?.followup,
+      }));
+
+      const res = await fetch(`/api/smes/${id}/criterion-scores/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Token ${token}`,
         },
-        body: JSON.stringify({
-          total_score: computed.capability, // capability score (Excel logic)
-          // Optional: if your backend accepts extra fields, keep these:
-          // details: computed.rows,
-          // weakness: computed.weaknesses,
-        }),
+        body: JSON.stringify({ scores: payload }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        navigate("/login", { replace: true });
+        return;
+      }
+      if (!res.ok) throw new Error(data.detail || "Failed to save draft.");
+    } catch (e) {
+      setError(e.message || "Failed to save draft.");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  // =========================
+  // Submit final -> backend computes Excel logic -> go capability page
+  // =========================
+  async function submitFinal() {
+    if (progress.scored !== progress.total) {
+      setError("Please score all criteria before submitting.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      // (1) ensure draft saved
+      await saveDraftToBackend();
+
+      // (2) submit capability
+      const res = await fetch(`/api/smes/${id}/submit-capability/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${token}` },
       });
 
       const data = await res.json().catch(() => ({}));
@@ -381,27 +382,16 @@ export default function RubricScoringPage() {
         return;
       }
 
-      if (!res.ok) throw new Error(data.detail || "Failed to save score.");
+      if (!res.ok) throw new Error(data.detail || "Submit failed.");
 
-      // Save computed report locally for the result page
-      localStorage.setItem(`final_scores_${id}`, JSON.stringify(scores));
-      localStorage.setItem(`final_report_${id}`, JSON.stringify(computed));
-      localStorage.removeItem(`draft_scores_${id}`);
-
-      // Go to capability result page
+      // (3) go to result page
       navigate(`/smes/${id}/capability`);
     } catch (e) {
-      setError(e.message || "Failed to save score.");
+      setError(e.message || "Submit failed.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   }
-
-  const activeCriterion = rubric[activeIdx];
-  const current = scores[activeCriterion.code];
-  const score = current?.score ?? null;
-  const selectedBandKey =
-    typeof score === "number" ? bandKeyFromScore(score) : null;
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
@@ -413,6 +403,7 @@ export default function RubricScoringPage() {
           background: theme.navBg,
         }}
       >
+        {/* Brand */}
         <div
           style={{ ...styles.brand, cursor: "pointer" }}
           onClick={() => navigate("/")}
@@ -428,6 +419,7 @@ export default function RubricScoringPage() {
           </div>
         </div>
 
+        {/* Right buttons */}
         <div style={styles.navRight}>
           <button
             style={{
@@ -441,7 +433,7 @@ export default function RubricScoringPage() {
             {dark ? "Light Mode" : "Dark Mode"}
           </button>
 
-          {/* ✅ Evaluator profile button */}
+          {/* ✅ Evaluator profile button (change path if your profile page route differs) */}
           <button
             style={{
               ...styles.ghostBtn,
@@ -451,24 +443,24 @@ export default function RubricScoringPage() {
             }}
             onClick={() => navigate("/evaluator-home")}
           >
-            My Profile
+            Evaluator Profile
           </button>
         </div>
       </nav>
 
-      {/* Header strip */}
+      {/* Header */}
       <section style={styles.header}>
         <div style={{ ...styles.heroGlow, background: theme.heroGlow }} />
         <div style={styles.headerInner}>
           <div>
             <div style={{ ...styles.kicker, color: theme.muted }}>
-              Evaluator scoring
+              SME Scoring
             </div>
             <div style={{ ...styles.headerTitle, color: theme.text }}>
               SME: {loading ? "Loading…" : sme?.name || "—"} • ID #{id}
             </div>
             <div style={{ ...styles.headerSub, color: theme.muted }}>
-              One criterion at a time. Use Next/Previous or the Criteria list.
+              Select the best matching band description. Use Next/Previous to move.
             </div>
           </div>
 
@@ -493,12 +485,12 @@ export default function RubricScoringPage() {
                 background: theme.card,
                 color: theme.text,
                 border: `1px solid ${theme.borderStrong}`,
+                opacity: savingDraft ? 0.7 : 1,
               }}
-              onClick={() =>
-                localStorage.setItem(`draft_scores_${id}`, JSON.stringify(scores))
-              }
+              onClick={saveDraftToBackend}
+              disabled={savingDraft}
             >
-              Save draft
+              {savingDraft ? "Saving…" : "Save draft"}
             </button>
           </div>
         </div>
@@ -507,7 +499,9 @@ export default function RubricScoringPage() {
           <div
             style={{
               ...styles.alert,
-              border: `1px solid ${dark ? "rgba(255,90,90,0.35)" : "#FECACA"}`,
+              border: `1px solid ${
+                dark ? "rgba(255,90,90,0.35)" : "#FECACA"
+              }`,
               background: dark ? "rgba(255,90,90,0.10)" : "#FEF2F2",
               color: dark ? "rgba(255,255,255,0.92)" : "#991B1B",
             }}
@@ -519,7 +513,7 @@ export default function RubricScoringPage() {
 
       {/* Main layout */}
       <div style={styles.layout}>
-        {/* Sidebar navigation */}
+        {/* Sidebar: criteria navigation */}
         <aside style={styles.sidebarWrap}>
           <div
             style={{
@@ -539,7 +533,7 @@ export default function RubricScoringPage() {
               {rubric.map((r, idx) => {
                 const val = scores[r.code]?.score;
                 const done = typeof val === "number";
-                const active = idx === activeIdx;
+                const activeNav = idx === activeIndex;
 
                 return (
                   <button
@@ -547,16 +541,12 @@ export default function RubricScoringPage() {
                     onClick={() => goToIndex(idx)}
                     style={{
                       ...styles.criteriaBtn,
-                      background: active
-                        ? dark
-                          ? "rgba(47,150,180,0.14)"
-                          : "rgba(47,150,180,0.12)"
+                      background: activeNav
+                        ? (dark ? "rgba(47,150,180,0.16)" : "rgba(47,150,180,0.12)")
                         : done
-                        ? dark
-                          ? "rgba(47,150,180,0.08)"
-                          : "rgba(47,150,180,0.07)"
+                        ? (dark ? "rgba(47,150,180,0.10)" : "rgba(47,150,180,0.08)")
                         : theme.bg,
-                      border: `1px solid ${active ? theme.button : theme.border}`,
+                      border: `1px solid ${activeNav ? theme.button : theme.border}`,
                       color: theme.text,
                     }}
                   >
@@ -602,14 +592,13 @@ export default function RubricScoringPage() {
             <div style={styles.cardTop}>
               <div>
                 <div style={{ ...styles.code, color: theme.muted }}>
-                  {activeCriterion.code} • Criterion {activeIdx + 1}/{rubric.length}
+                  {activeCriterion.code} • {activeIndex + 1}/{rubric.length}
                 </div>
                 <div style={{ ...styles.cardTitle, color: theme.text }}>
                   {activeCriterion.title}
                 </div>
                 <div style={{ ...styles.helper, color: theme.muted }}>
-                  Click the best matching description below (auto-sets score).
-                  Fine-tune if needed.
+                  Click one band description to set score automatically.
                 </div>
               </div>
 
@@ -619,7 +608,7 @@ export default function RubricScoringPage() {
                   type="range"
                   min={1}
                   max={10}
-                  value={typeof score === "number" ? score : 5}
+                  value={typeof activeScore === "number" ? activeScore : 5}
                   onChange={(e) =>
                     setScore(
                       activeCriterion.code,
@@ -633,7 +622,7 @@ export default function RubricScoringPage() {
                   type="number"
                   min={1}
                   max={10}
-                  value={score ?? ""}
+                  value={activeScore ?? ""}
                   onChange={(e) =>
                     setScore(
                       activeCriterion.code,
@@ -660,15 +649,13 @@ export default function RubricScoringPage() {
                   Rubric bands
                 </div>
                 <div style={{ fontSize: 12, color: theme.muted }}>
-                  {selectedBandKey
-                    ? `Selected: ${selectedBandKey}`
-                    : "Not selected yet"}
+                  {selectedBandKey ? `Selected: ${selectedBandKey}` : "Not selected yet"}
                 </div>
               </div>
 
               <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
                 {bands.map((b) => {
-                  const active = selectedBandKey === b.key;
+                  const activeBand = selectedBandKey === b.key;
 
                   return (
                     <button
@@ -677,24 +664,18 @@ export default function RubricScoringPage() {
                       onClick={() => setBand(activeCriterion.code, b)}
                       style={{
                         ...styles.bandCard,
-                        background: active
-                          ? dark
-                            ? "rgba(47,150,180,0.12)"
-                            : "rgba(47,150,180,0.10)"
+                        background: activeBand
+                          ? (dark
+                              ? "rgba(47,150,180,0.12)"
+                              : "rgba(47,150,180,0.10)")
                           : theme.bg,
                         border: `1px solid ${
-                          active ? theme.button : theme.border
+                          activeBand ? theme.button : theme.border
                         }`,
                         color: theme.text,
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 14,
-                          alignItems: "flex-start",
-                        }}
-                      >
+                      <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                         <div
                           style={{
                             ...styles.bandIcon,
@@ -703,7 +684,7 @@ export default function RubricScoringPage() {
                             border: `1px solid ${theme.border}`,
                           }}
                         >
-                          {active ? "✓" : "＋"}
+                          {activeBand ? "✓" : "＋"}
                         </div>
 
                         <div style={{ flex: 1, textAlign: "left" }}>
@@ -728,10 +709,10 @@ export default function RubricScoringPage() {
               </div>
             </div>
 
-            {/* Notes + followup */}
+            {/* Notes */}
             <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
               <textarea
-                value={current?.notes ?? ""}
+                value={active.notes}
                 onChange={(e) =>
                   setScores((prev) => ({
                     ...prev,
@@ -760,7 +741,7 @@ export default function RubricScoringPage() {
               >
                 <input
                   type="checkbox"
-                  checked={!!current?.followup}
+                  checked={!!active.followup}
                   onChange={(e) =>
                     setScores((prev) => ({
                       ...prev,
@@ -777,60 +758,50 @@ export default function RubricScoringPage() {
               </label>
             </div>
 
-            {/* Prev / Next + Submit final INSIDE scoring card */}
+            {/* Navigation buttons */}
             <div style={styles.navRow}>
               <button
-                type="button"
-                onClick={goPrev}
-                disabled={activeIdx === 0}
                 style={{
                   ...styles.ghostBtn,
                   background: theme.card,
                   color: theme.text,
                   border: `1px solid ${theme.borderStrong}`,
-                  opacity: activeIdx === 0 ? 0.55 : 1,
-                  cursor: activeIdx === 0 ? "not-allowed" : "pointer",
+                  opacity: activeIndex === 0 ? 0.55 : 1,
                 }}
+                disabled={activeIndex === 0}
+                onClick={() => goToIndex(activeIndex - 1)}
               >
                 ← Previous
               </button>
 
-              
-              {activeIdx < rubric.length - 1 ? (
+              {activeIndex < rubric.length - 1 ? (
                 <button
-                  type="button"
-                  onClick={goNext}
                   style={{
                     ...styles.primaryBtn,
                     background: theme.button,
                     color: theme.buttonText,
+                    opacity: 1,
                   }}
+                  onClick={() => goToIndex(activeIndex + 1)}
                 >
                   Next →
                 </button>
               ) : (
                 <button
-                  type="button"
-                  onClick={submitFinal}
-                  disabled={!allDone || saving}
                   style={{
                     ...styles.primaryBtn,
                     background: theme.button,
                     color: theme.buttonText,
-                    opacity: !allDone || saving ? 0.65 : 1,
-                    cursor: !allDone || saving ? "not-allowed" : "pointer",
+                    opacity:
+                      progress.scored === progress.total && !submitting ? 1 : 0.65,
                   }}
+                  disabled={progress.scored !== progress.total || submitting}
+                  onClick={submitFinal}
                 >
-                  {saving ? "Submitting…" : "Submit final"}
+                  {submitting ? "Submitting…" : "Submit Final"}
                 </button>
               )}
             </div>
-
-            {!allDone && (
-              <div style={{ marginTop: 10, fontSize: 12, color: theme.muted }}>
-                Fill all criteria to enable “Submit final”.
-              </div>
-            )}
           </section>
         </main>
       </div>
@@ -1012,15 +983,8 @@ const styles = {
     borderRadius: 999,
     whiteSpace: "nowrap",
   },
-  cards: {
-    display: "grid",
-    gap: 16,
-    alignContent: "start",
-  },
-  card: {
-    borderRadius: 16,
-    padding: 18,
-  },
+  cards: { display: "grid", gap: 16, alignContent: "start" },
+  card: { borderRadius: 16, padding: 18 },
   cardTop: {
     display: "flex",
     justifyContent: "space-between",
@@ -1046,11 +1010,7 @@ const styles = {
     lineHeight: 1.45,
     maxWidth: 640,
   },
-  fineTune: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-  },
+  fineTune: { display: "flex", alignItems: "center", gap: 10 },
   numberInput: {
     width: 72,
     padding: "8px 10px",
@@ -1090,11 +1050,11 @@ const styles = {
     resize: "vertical",
   },
   navRow: {
-    marginTop: 16,
+    marginTop: 18,
     display: "flex",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    alignItems: "center",
+    gap: 10,
     flexWrap: "wrap",
   },
   footer: {

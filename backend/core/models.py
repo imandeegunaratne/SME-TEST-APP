@@ -125,7 +125,8 @@ class SMECriterionScore(models.Model):
     criterion_code = models.CharField(max_length=10)  # C1..C10
     score = models.PositiveSmallIntegerField(null=True, blank=True)  # 1..10
     updated_at = models.DateTimeField(auto_now=True)
-
+    notes = models.TextField(blank=True, default="")
+    followup = models.BooleanField(default=False)
     class Meta:
         unique_together = ("sme", "evaluator", "criterion_code")
 
