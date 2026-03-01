@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 /* =========================
-   Bands + Rubric (per-criteria)
+   Bands
 ========================= */
 const bands = [
   { key: "1–2", label: "1–2 Very weak", min: 1, max: 2 },
@@ -14,11 +14,17 @@ const bands = [
   { key: "9–10", label: "9–10 Very strong", min: 9, max: 10 },
 ];
 
-// ✅ Add codes (C1..C10) because your UI expects r.code in many places
+/* =========================
+   Rubric + Excel Weights (from your uploaded Excel "Scoring" sheet column C)
+   Normalized = score/10
+   Weighted = weight * normalized
+   Gap = weight * (1 - normalized)
+========================= */
 const rubric = [
   {
     code: "C1",
     title: "Business opportunity gap",
+    weight: 0.0780563516111449,
     desc: {
       "1–2": "No clear opportunity gap or customer demand",
       "3–4": "Opportunity gap described but unclear; weak demand signs",
@@ -30,20 +36,22 @@ const rubric = [
   {
     code: "C2",
     title: "Customer pains and gains",
+    weight: 0.07915268875862755,
     desc: {
       "1–2":
-        "No clear identification of customer pains and gains, very  similar to others",
+        "No clear identification of customer pains and gains, very similar to others",
       "3–4":
-        "Some clear idenification of customer pains and gains, little differentiation",
+        "Some clear identification of customer pains and gains, little differentiation",
       "5–6":
-        "Clear identification of customer pains and gains,  some differentiation",
-      "7–8": "Clearly identification of pains and gains and  diffrentiations",
+        "Clear identification of customer pains and gains, some differentiation",
+      "7–8": "Clearly identification of pains and gains and differentiations",
       "9–10": "Strong, unique value proposition",
     },
   },
   {
     code: "C3",
     title: "Intrest to take risk",
+    weight: 0.07717695554997973,
     desc: {
       "1–2": "Poor risk taker",
       "3–4": "Somewhat risk taker",
@@ -55,6 +63,7 @@ const rubric = [
   {
     code: "C4",
     title: "Stakeholder Engagement & Support",
+    weight: 0.0503581556946596,
     desc: {
       "1–2": "Weak or unstable relationships",
       "3–4": "Basic relationships; limited support",
@@ -66,6 +75,7 @@ const rubric = [
   {
     code: "C5",
     title: "Competitive Position",
+    weight: 0.12541568085659088,
     desc: {
       "1–2": "Unaware of competition",
       "3–4": "Knows competitors but reacts late",
@@ -77,8 +87,9 @@ const rubric = [
   {
     code: "C6",
     title: "Management & Workforce Capability",
+    weight: 0.042985571513489466,
     desc: {
-      "1–2": "Poor management ,role confusion",
+      "1–2": "Poor management, role confusion",
       "3–4": "Basic management; skill gaps",
       "5–6": "Adequate skills and role clarity",
       "7–8": "Capable management and motivated staff",
@@ -88,9 +99,10 @@ const rubric = [
   {
     code: "C7",
     title: "Streams of Revenue",
+    weight: 0.18314870314095424,
     desc: {
       "1–2": "Unstable or irregular income",
-      "3–4": "Some income stability but  highly dependent",
+      "3–4": "Some income stability but highly dependent",
       "5–6": "Reasonably stable income",
       "7–8": "Stable and diversified revenue",
       "9–10": "Strong, growing, and predictable revenue",
@@ -99,6 +111,7 @@ const rubric = [
   {
     code: "C8",
     title: "Cost Control & Efficiency",
+    weight: 0.16476744163849816,
     desc: {
       "1–2": "Costs unclear; poor control",
       "3–4": "Basic cost tracking",
@@ -110,26 +123,26 @@ const rubric = [
   {
     code: "C9",
     title: "Taking advantage of state assistance",
+    weight: 0.09499841137039716,
     desc: {
-      "1–2": "No engagemet of state",
-      "3–4": "some engagemet of state",
+      "1–2": "No engagement of state",
+      "3–4": "Some engagement of state",
       "5–6": "Some use of state support programs",
-      "7–8": "Active use ofstate  institutions/networks",
+      "7–8": "Active use of state institutions/networks",
       "9–10": "Use state as strategic institutional leverage",
     },
   },
   {
     code: "C10",
     title: "Operational Readiness",
+    weight: 0.1039400398656582,
     desc: {
       "1–2":
         "Lacks basic facilities or equipment; frequent operational disruptions",
       "3–4":
         "Basic resources exist but often inadequate; disruptions occur",
-      "5–6":
-        "Adequate resources to run daily operations with minor issues",
-      "7–8":
-        "Sufficient resources; operations run smoothly with basic backups",
+      "5–6": "Adequate resources to run daily operations with minor issues",
+      "7–8": "Sufficient resources; operations run smoothly with basic backups",
       "9–10":
         "Strong operational resources; smooth, reliable operations with adequate backups",
     },
@@ -151,17 +164,51 @@ function clampScore(n) {
   return n;
 }
 
-// When user selects a band description, what score should system set?
 function scoreForBand(b) {
-  // midpoint
+  // midpoint (recommended)
   return Math.round((b.min + b.max) / 2);
+}
+
+function computeExcelOutputs(scoresByCode) {
+  // Excel logic:
+  // normalized = score/10
+  // weighted = weight * normalized
+  // gap = weight * (1 - normalized)
+  const rows = rubric.map((r) => {
+    const rawScore = scoresByCode[r.code]?.score;
+    const score = typeof rawScore === "number" ? rawScore : null;
+    const normalized = score == null ? null : score / 10;
+    const weighted = normalized == null ? null : r.weight * normalized;
+    const gap = normalized == null ? null : r.weight * (1 - normalized);
+
+    return {
+      code: r.code,
+      title: r.title,
+      weight: r.weight,
+      score,
+      normalized,
+      weighted,
+      gap,
+    };
+  });
+
+  const weightedSum = rows.reduce((acc, row) => acc + (row.weighted ?? 0), 0);
+  const capability = Math.round(weightedSum * 100) / 100; // ROUND(...,2) like Excel
+
+  // Weakness explorer: rank by GAP desc (highest gap = biggest weakness)
+  const weaknesses = rows
+    .filter((r) => typeof r.gap === "number" && r.gap > 0)
+    .slice()
+    .sort((a, b) => (b.gap ?? 0) - (a.gap ?? 0))
+    .map((r, idx) => ({ ...r, rank: idx + 1 }));
+
+  return { rows, capability, weaknesses };
 }
 
 /* =========================
    Theme (match Landing UI)
 ========================= */
 const BRAND = "#2F96B4";
-
 const darkTheme = {
   bg: "#0B1220",
   navBg: "rgba(11,18,32,0.75)",
@@ -176,7 +223,6 @@ const darkTheme = {
   heroGlow:
     "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.25), transparent 65%)",
 };
-
 const lightTheme = {
   bg: "#F4F8FB",
   navBg: "rgba(244,248,251,0.75)",
@@ -196,7 +242,6 @@ export default function RubricScoringPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // Persist theme (same logic as Landing)
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved ? saved === "dark" : true;
@@ -216,16 +261,14 @@ export default function RubricScoringPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ✅ show ONE criterion at a time
   const [activeIdx, setActiveIdx] = useState(0);
+  const cardRef = useRef(null);
 
   const [scores, setScores] = useState(() =>
     Object.fromEntries(
       rubric.map((r) => [r.code, { score: null, notes: "", followup: false }])
     )
   );
-
-  const cardRef = useRef(null);
 
   const progress = useMemo(() => {
     const scored = Object.values(scores).filter(
@@ -234,13 +277,9 @@ export default function RubricScoringPage() {
     return { scored, total: rubric.length };
   }, [scores]);
 
-  const overall = useMemo(() => {
-    const vals = Object.values(scores)
-      .map((v) => v.score)
-      .filter((s) => typeof s === "number");
-    if (!vals.length) return null;
-    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
-  }, [scores]);
+  const allDone = progress.scored === progress.total;
+
+  const { capability } = useMemo(() => computeExcelOutputs(scores), [scores]);
 
   const setScore = (code, newScore) => {
     setScores((prev) => ({
@@ -254,7 +293,6 @@ export default function RubricScoringPage() {
   const goToIndex = (idx) => {
     const safe = Math.max(0, Math.min(rubric.length - 1, idx));
     setActiveIdx(safe);
-    // smooth scroll to the single card
     requestAnimationFrame(() => {
       cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -263,7 +301,6 @@ export default function RubricScoringPage() {
   const goNext = () => goToIndex(activeIdx + 1);
   const goPrev = () => goToIndex(activeIdx - 1);
 
-  // Load data
   useEffect(() => {
     if (!token) {
       navigate("/login", { replace: true });
@@ -277,9 +314,7 @@ export default function RubricScoringPage() {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object") setScores(parsed);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     async function load() {
       setLoading(true);
@@ -309,7 +344,7 @@ export default function RubricScoringPage() {
   }, [id, token, navigate]);
 
   async function submitFinal() {
-    if (overall == null) return;
+    if (!allDone) return;
 
     if (!token) {
       navigate("/login", { replace: true });
@@ -319,14 +354,23 @@ export default function RubricScoringPage() {
     setSaving(true);
     setError("");
 
+    const computed = computeExcelOutputs(scores);
+
     try {
+      // Save to backend (keeps your existing endpoint)
+      // NOTE: Excel capability score is 0..1 (rounded to 2 decimals)
       const res = await fetch(`/api/smes/${id}/score/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Token ${token}`,
         },
-        body: JSON.stringify({ total_score: overall }),
+        body: JSON.stringify({
+          total_score: computed.capability, // capability score (Excel logic)
+          // Optional: if your backend accepts extra fields, keep these:
+          // details: computed.rows,
+          // weakness: computed.weaknesses,
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -339,8 +383,13 @@ export default function RubricScoringPage() {
 
       if (!res.ok) throw new Error(data.detail || "Failed to save score.");
 
+      // Save computed report locally for the result page
+      localStorage.setItem(`final_scores_${id}`, JSON.stringify(scores));
+      localStorage.setItem(`final_report_${id}`, JSON.stringify(computed));
       localStorage.removeItem(`draft_scores_${id}`);
-      navigate(`/smes/${id}/report`);
+
+      // Go to capability result page
+      navigate(`/smes/${id}/capability`);
     } catch (e) {
       setError(e.message || "Failed to save score.");
     } finally {
@@ -392,6 +441,7 @@ export default function RubricScoringPage() {
             {dark ? "Light Mode" : "Dark Mode"}
           </button>
 
+          {/* ✅ Evaluator profile button */}
           <button
             style={{
               ...styles.ghostBtn,
@@ -399,22 +449,9 @@ export default function RubricScoringPage() {
               color: theme.text,
               border: `1px solid ${theme.borderStrong}`,
             }}
-            onClick={() => navigate(`/smes/${id}/report`)}
+            onClick={() => navigate("/evaluator-home")}
           >
-            Report
-          </button>
-
-          <button
-            style={{
-              ...styles.primaryBtn,
-              background: theme.button,
-              color: theme.buttonText,
-              opacity: progress.scored === progress.total && !saving ? 1 : 0.65,
-            }}
-            disabled={progress.scored !== progress.total || saving}
-            onClick={submitFinal}
-          >
-            {saving ? "Submitting…" : "Submit final"}
+            My Profile
           </button>
         </div>
       </nav>
@@ -431,8 +468,7 @@ export default function RubricScoringPage() {
               SME: {loading ? "Loading…" : sme?.name || "—"} • ID #{id}
             </div>
             <div style={{ ...styles.headerSub, color: theme.muted }}>
-              One criterion at a time. Use Next/Previous or the Criteria list to
-              navigate.
+              One criterion at a time. Use Next/Previous or the Criteria list.
             </div>
           </div>
 
@@ -449,17 +485,6 @@ export default function RubricScoringPage() {
               <span style={{ fontWeight: 950 }}>
                 {progress.scored}/{progress.total}
               </span>
-            </div>
-
-            <div
-              style={{
-                ...styles.pill,
-                border: `1px solid ${theme.borderStrong}`,
-                background: theme.card,
-                color: theme.text,
-              }}
-            >
-              Overall: <span style={{ fontWeight: 950 }}>{overall ?? "—"}</span>
             </div>
 
             <button
@@ -523,9 +548,13 @@ export default function RubricScoringPage() {
                     style={{
                       ...styles.criteriaBtn,
                       background: active
-                        ? (dark ? "rgba(47,150,180,0.14)" : "rgba(47,150,180,0.12)")
+                        ? dark
+                          ? "rgba(47,150,180,0.14)"
+                          : "rgba(47,150,180,0.12)"
                         : done
-                        ? (dark ? "rgba(47,150,180,0.08)" : "rgba(47,150,180,0.07)")
+                        ? dark
+                          ? "rgba(47,150,180,0.08)"
+                          : "rgba(47,150,180,0.07)"
                         : theme.bg,
                       border: `1px solid ${active ? theme.button : theme.border}`,
                       color: theme.text,
@@ -540,18 +569,16 @@ export default function RubricScoringPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span
-                        style={{
-                          ...styles.badge,
-                          border: `1px solid ${theme.border}`,
-                          background: theme.card,
-                          color: theme.text,
-                        }}
-                      >
-                        {done ? val : "—"}
-                      </span>
-                    </div>
+                    <span
+                      style={{
+                        ...styles.badge,
+                        border: `1px solid ${theme.border}`,
+                        background: theme.card,
+                        color: theme.text,
+                      }}
+                    >
+                      {done ? val : "—"}
+                    </span>
                   </button>
                 );
               })}
@@ -594,7 +621,10 @@ export default function RubricScoringPage() {
                   max={10}
                   value={typeof score === "number" ? score : 5}
                   onChange={(e) =>
-                    setScore(activeCriterion.code, clampScore(Number(e.target.value)))
+                    setScore(
+                      activeCriterion.code,
+                      clampScore(Number(e.target.value))
+                    )
                   }
                   style={{ width: 220 }}
                 />
@@ -607,7 +637,9 @@ export default function RubricScoringPage() {
                   onChange={(e) =>
                     setScore(
                       activeCriterion.code,
-                      e.target.value === "" ? null : clampScore(Number(e.target.value))
+                      e.target.value === ""
+                        ? null
+                        : clampScore(Number(e.target.value))
                     )
                   }
                   placeholder="—"
@@ -628,7 +660,9 @@ export default function RubricScoringPage() {
                   Rubric bands
                 </div>
                 <div style={{ fontSize: 12, color: theme.muted }}>
-                  {selectedBandKey ? `Selected: ${selectedBandKey}` : "Not selected yet"}
+                  {selectedBandKey
+                    ? `Selected: ${selectedBandKey}`
+                    : "Not selected yet"}
                 </div>
               </div>
 
@@ -644,13 +678,23 @@ export default function RubricScoringPage() {
                       style={{
                         ...styles.bandCard,
                         background: active
-                          ? (dark ? "rgba(47,150,180,0.12)" : "rgba(47,150,180,0.10)")
+                          ? dark
+                            ? "rgba(47,150,180,0.12)"
+                            : "rgba(47,150,180,0.10)"
                           : theme.bg,
-                        border: `1px solid ${active ? theme.button : theme.border}`,
+                        border: `1px solid ${
+                          active ? theme.button : theme.border
+                        }`,
                         color: theme.text,
                       }}
                     >
-                      <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 14,
+                          alignItems: "flex-start",
+                        }}
+                      >
                         <div
                           style={{
                             ...styles.bandIcon,
@@ -733,7 +777,7 @@ export default function RubricScoringPage() {
               </label>
             </div>
 
-            {/* Prev / Next navigation inside the same page */}
+            {/* Prev / Next + Submit final INSIDE scoring card */}
             <div style={styles.navRow}>
               <button
                 type="button"
@@ -751,31 +795,46 @@ export default function RubricScoringPage() {
                 ← Previous
               </button>
 
-              <div style={{ fontSize: 12, color: theme.muted, fontWeight: 900 }}>
-                {activeCriterion.code} • {activeCriterion.title}
-              </div>
-
-              <button
-                type="button"
-                onClick={goNext}
-                disabled={activeIdx === rubric.length - 1}
-                style={{
-                  ...styles.primaryBtn,
-                  background: theme.button,
-                  color: theme.buttonText,
-                  opacity: activeIdx === rubric.length - 1 ? 0.65 : 1,
-                  cursor:
-                    activeIdx === rubric.length - 1 ? "not-allowed" : "pointer",
-                }}
-              >
-                Next →
-              </button>
+              
+              {activeIdx < rubric.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  style={{
+                    ...styles.primaryBtn,
+                    background: theme.button,
+                    color: theme.buttonText,
+                  }}
+                >
+                  Next →
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={submitFinal}
+                  disabled={!allDone || saving}
+                  style={{
+                    ...styles.primaryBtn,
+                    background: theme.button,
+                    color: theme.buttonText,
+                    opacity: !allDone || saving ? 0.65 : 1,
+                    cursor: !allDone || saving ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {saving ? "Submitting…" : "Submit final"}
+                </button>
+              )}
             </div>
+
+            {!allDone && (
+              <div style={{ marginTop: 10, fontSize: 12, color: theme.muted }}>
+                Fill all criteria to enable “Submit final”.
+              </div>
+            )}
           </section>
         </main>
       </div>
 
-      {/* Footer */}
       <footer
         style={{
           ...styles.footer,
@@ -801,7 +860,6 @@ const styles = {
     overflowX: "hidden",
     fontFamily: "system-ui, Avenir, Helvetica, Arial, sans-serif",
   },
-
   navbar: {
     position: "sticky",
     top: 0,
@@ -813,39 +871,33 @@ const styles = {
     flexWrap: "wrap",
     backdropFilter: "blur(10px)",
   },
-
   brand: {
     display: "flex",
     alignItems: "center",
     gap: 12,
     minWidth: 220,
   },
-
   logoImg: {
     width: 92,
     height: 62,
     objectFit: "contain",
   },
-
   brandTitle: {
     fontWeight: 950,
     letterSpacing: 0.2,
     fontSize: 20,
   },
-
   brandSub: {
     fontSize: 12,
     opacity: 0.9,
     marginTop: 2,
   },
-
   navRight: {
     display: "flex",
     gap: 10,
     flexWrap: "wrap",
     alignItems: "center",
   },
-
   ghostBtn: {
     padding: "9px 14px",
     borderRadius: 10,
@@ -854,7 +906,6 @@ const styles = {
     background: "transparent",
     fontWeight: 800,
   },
-
   primaryBtn: {
     padding: "9px 16px",
     borderRadius: 10,
@@ -862,18 +913,15 @@ const styles = {
     cursor: "pointer",
     fontWeight: 900,
   },
-
   header: {
     position: "relative",
     padding: "22px 5% 14px",
   },
-
   heroGlow: {
     position: "absolute",
     inset: 0,
     pointerEvents: "none",
   },
-
   headerInner: {
     position: "relative",
     zIndex: 1,
@@ -883,14 +931,12 @@ const styles = {
     gap: 16,
     flexWrap: "wrap",
   },
-
   kicker: {
     fontSize: 12,
     fontWeight: 900,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
-
   headerTitle: {
     marginTop: 6,
     fontSize: "clamp(20px, 2.6vw, 30px)",
@@ -898,14 +944,12 @@ const styles = {
     letterSpacing: -0.4,
     lineHeight: 1.15,
   },
-
   headerSub: {
     marginTop: 8,
     fontSize: 13,
     lineHeight: 1.5,
     maxWidth: 780,
   },
-
   headerRight: {
     position: "relative",
     zIndex: 1,
@@ -915,14 +959,12 @@ const styles = {
     alignItems: "center",
     justifyContent: "flex-end",
   },
-
   pill: {
     padding: "9px 12px",
     borderRadius: 12,
     fontWeight: 900,
     fontSize: 13,
   },
-
   alert: {
     position: "relative",
     zIndex: 1,
@@ -932,7 +974,6 @@ const styles = {
     fontWeight: 800,
     fontSize: 13,
   },
-
   layout: {
     width: "min(1200px, 100%)",
     margin: "0 auto",
@@ -941,25 +982,19 @@ const styles = {
     gridTemplateColumns: "320px 1fr",
     gap: 16,
   },
-
-  sidebarWrap: {
-    position: "relative",
-  },
-
+  sidebarWrap: { position: "relative" },
   sidebar: {
     position: "sticky",
     top: 92,
     borderRadius: 16,
     padding: 16,
   },
-
   sidebarTitle: {
     fontWeight: 950,
     marginBottom: 12,
     fontSize: 14,
     letterSpacing: 0.2,
   },
-
   criteriaBtn: {
     width: "100%",
     borderRadius: 14,
@@ -970,7 +1005,6 @@ const styles = {
     alignItems: "center",
     gap: 10,
   },
-
   badge: {
     fontSize: 12,
     fontWeight: 950,
@@ -978,18 +1012,15 @@ const styles = {
     borderRadius: 999,
     whiteSpace: "nowrap",
   },
-
   cards: {
     display: "grid",
     gap: 16,
     alignContent: "start",
   },
-
   card: {
     borderRadius: 16,
     padding: 18,
   },
-
   cardTop: {
     display: "flex",
     justifyContent: "space-between",
@@ -997,34 +1028,29 @@ const styles = {
     gap: 14,
     flexWrap: "wrap",
   },
-
   code: {
     fontSize: 12,
     fontWeight: 900,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
-
   cardTitle: {
     marginTop: 6,
     fontWeight: 950,
     fontSize: 18,
     letterSpacing: -0.2,
   },
-
   helper: {
     marginTop: 6,
     fontSize: 13,
     lineHeight: 1.45,
     maxWidth: 640,
   },
-
   fineTune: {
     display: "flex",
     alignItems: "center",
     gap: 10,
   },
-
   numberInput: {
     width: 72,
     padding: "8px 10px",
@@ -1032,14 +1058,12 @@ const styles = {
     outline: "none",
     fontWeight: 900,
   },
-
   bandsHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 10,
   },
-
   bandCard: {
     width: "100%",
     borderRadius: 16,
@@ -1047,7 +1071,6 @@ const styles = {
     cursor: "pointer",
     textAlign: "left",
   },
-
   bandIcon: {
     width: 44,
     height: 44,
@@ -1058,7 +1081,6 @@ const styles = {
     fontWeight: 950,
     flexShrink: 0,
   },
-
   textarea: {
     width: "100%",
     minHeight: 96,
@@ -1067,7 +1089,6 @@ const styles = {
     outline: "none",
     resize: "vertical",
   },
-
   navRow: {
     marginTop: 16,
     display: "flex",
@@ -1076,7 +1097,6 @@ const styles = {
     gap: 12,
     flexWrap: "wrap",
   },
-
   footer: {
     marginTop: "auto",
     padding: "18px 5%",

@@ -8,6 +8,7 @@ import SmeRegister from "./pages/SMERegister";
 import SMEReport from "./pages/SMEReport";
 import SMEScore from "./pages/Scoring";
 import BankAdminDashboard from "./pages/BankAdminDashbord";
+import Results from "./pages/Results";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -61,6 +62,15 @@ function App() {
           element={
             <ProtectedRoute allowRoles={["BANK_ADMIN"]}>
               <BankAdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+         <Route
+          path="/smes/:id/results"
+          element={
+            <ProtectedRoute allowRoles={["EVALUATOR"]}>
+              <Results />
             </ProtectedRoute>
           }
         />

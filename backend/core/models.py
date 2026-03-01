@@ -2,9 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
-# ==========================
+
 # Bank Model
-# ==========================
 class Bank(models.Model):
     # Allow null/blank to stay compatible with earlier migrations.
     # In practice the app expects a real unique code.
@@ -18,9 +17,8 @@ class Bank(models.Model):
         return self.name
 
 
-# ==========================
+
 # Profile Model (User Roles + Approval Workflow)
-# ==========================
 class Profile(models.Model):
 
     ROLE_CHOICES = (
@@ -55,9 +53,8 @@ class Profile(models.Model):
         return f"{self.user.username} - {self.bank.name} - {self.role}"
 
 
-# ==========================
+
 # SME Model
-# ==========================
 class SME(models.Model):
 
     bank = models.ForeignKey(
@@ -112,7 +109,25 @@ class SME(models.Model):
     def __str__(self):
         return f"{self.name} ({self.br_number})"
 
+#CriterionWeight Model
+class CriterionWeight(models.Model):
+    code = models.CharField(max_length=10, unique=True)  
+    title = models.CharField(max_length=255)
+    weight = models.DecimalField(max_digits=12, decimal_places=10)  
+    is_active = models.BooleanField(default=True)
 
-"""Note: If you later want full scoring history, create a separate model
-(e.g., SMEScore) + migrations. For now the app stores the latest score on SME
-to match the existing API + frontend."""
+    def __str__(self):
+        return f"{self.code} ({self.weight})"
+    
+class SMECriterionScore(models.Model):
+    sme = models.ForeignKey("SME", on_delete=models.CASCADE, related_name="criterion_scores")
+    evaluator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="criterion_scores") 
+    criterion_code = models.CharField(max_length=10)  # C1..C10
+    score = models.PositiveSmallIntegerField(null=True, blank=True)  # 1..10
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("sme", "evaluator", "criterion_code")
+
+    def __str__(self):
+        return f"{self.sme_id} {self.criterion_code} = {self.score}"
