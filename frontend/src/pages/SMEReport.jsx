@@ -1,6 +1,7 @@
 // frontend/src/pages/SMEReport.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import logo from "../assets/logo.png";
 
 export default function SMEReport() {
   const { id } = useParams();
@@ -44,7 +45,9 @@ export default function SMEReport() {
           return;
         }
 
-        if (!res.ok) throw new Error(j.detail || "Failed to load report.");
+        if (!res.ok) {
+          throw new Error(j.detail || "Failed to load report.");
+        }
 
         setData(j);
       } catch (e) {
@@ -55,28 +58,58 @@ export default function SMEReport() {
     })();
   }, [id, token, navigate]);
 
-  function getScoreLabel(score) {
-    const s = Number(score || 0);
-
-    if (s >= 80) return "Excellent";
-    if (s >= 65) return "Good";
-    if (s >= 50) return "Average";
-    return "Needs Improvement";
+  function formatScore(value) {
+    if (value === null || value === undefined || value === "") return "—";
+    return Number(value).toFixed(2);
   }
 
-  function getScoreColor(score) {
-    const s = Number(score || 0);
+  async function downloadPDF() {
+  try {
+    const res = await fetch(`/api/smes/${id}/report/pdf/`, {
+      headers: {
+        Authorization: `Token ${token}`,
+      },
+    });
 
-    if (s >= 80) return "#16A34A";
-    if (s >= 65) return "#2563EB";
-    if (s >= 50) return "#D97706";
-    return "#DC2626";
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(j.detail || "Failed to download PDF.");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SME_Report_${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(e.message || "Failed to download PDF.");
   }
+}
 
   if (loading) {
     return (
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-        <div style={styles.centerBox}>Loading report...</div>
+        <Navbar
+          theme={theme}
+          username={username}
+          onLogoClick={() => navigate("/evaluator-home")}
+          onDownloadPDF={downloadPDF}
+        />
+        <div style={styles.wrapper}>
+          <div style={styles.messageBox}>Loading report...</div>
+        </div>
       </div>
     );
   }
@@ -84,14 +117,22 @@ export default function SMEReport() {
   if (err) {
     return (
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-        <div
-          style={{
-            ...styles.centerBox,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          Error: {err}
+        <Navbar
+          theme={theme}
+          username={username}
+          onLogoClick={() => navigate("/evaluator-home")}
+          onDownloadPDF={downloadPDF}
+        />
+        <div style={styles.wrapper}>
+          <div
+            style={{
+              ...styles.messageBox,
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+            }}
+          >
+            Error: {err}
+          </div>
         </div>
       </div>
     );
@@ -99,171 +140,181 @@ export default function SMEReport() {
 
   if (!data) return null;
 
-  const totalScore = Number(data.total_score || 0).toFixed(2);
-  const scoreLabel = getScoreLabel(data.total_score);
-  const scoreColor = getScoreColor(data.total_score);
+  const criteria = Array.isArray(data.criteria) ? data.criteria : [];
+  const overallEvidence =
+    data.additional_details ||
+    data.evidence ||
+    data.notes ||
+    data.overall_notes ||
+    "";
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      <div style={styles.container}>
-        {/* top bar */}
-        <div style={styles.topActions}>
+      <Navbar
+        theme={theme}
+        username={username}
+        onLogoClick={() => navigate("/evaluator-home")}
+        onDownloadPDF={downloadPDF}
+      />
+
+      <div style={styles.wrapper}>
+        <div
+          style={{
+            ...styles.reportSheet,
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            color: theme.text,
+          }}
+        >
+          <div style={styles.reportHeader}>
+            <div>
+              <div style={styles.reportTitle}>SME Evaluation Report</div>
+              <div style={styles.reportSubtitle}>Decision Support Platform</div>
+            </div>
+
+            <div style={styles.scoreBox}>
+              <div style={styles.scoreBoxLabel}>Score</div>
+              <div style={styles.scoreBoxValue}>
+                {formatScore(data.capability_score)}
+              </div>
+            </div>
+          </div>
+
+          <section style={styles.section}>
+            <h3 style={styles.sectionTitle}>SME Information</h3>
+            <div style={styles.infoTable}>
+              <div style={styles.infoRow}>
+                <div style={styles.infoLabel}>SME Name</div>
+                <div style={styles.infoValue}>{data.name || "—"}</div>
+              </div>
+              <div style={styles.infoRow}>
+                <div style={styles.infoLabel}>BR Number</div>
+                <div style={styles.infoValue}>{data.br_number || "—"}</div>
+              </div>
+              <div style={styles.infoRow}>
+                <div style={styles.infoLabel}>Industry</div>
+                <div style={styles.infoValue}>{data.industry || "—"}</div>
+              </div>
+              <div style={styles.infoRow}>
+                <div style={styles.infoLabel}>Scored By</div>
+                <div style={styles.infoValue}>{data.scored_by || username || "—"}</div>
+              </div>
+            </div>
+          </section>
+
+          <section style={styles.section}>
+            <h3 style={styles.sectionTitle}>Criteria Scores</h3>
+
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Code</th>
+                    <th style={styles.th}>Criterion</th>
+                    <th style={styles.thRight}>Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {criteria.length === 0 ? (
+                    <tr>
+                      <td style={styles.td} colSpan={3}>
+                        No criteria scores available.
+                      </td>
+                    </tr>
+                  ) : (
+                    criteria.map((item, index) => {
+                      const code =
+                        item.code ||
+                        item.criterion_code ||
+                        item.criterion ||
+                        `C${index + 1}`;
+
+                      const title =
+                        item.label ||
+                        item.name ||
+                        item.title ||
+                        `Criterion ${index + 1}`;
+
+                      const score =
+                        item.score ??
+                        item.raw_score ??
+                        item.value ??
+                        null;
+
+                      return (
+                        <tr key={`${code}-${index}`}>
+                          <td style={styles.td}>{code}</td>
+                          <td style={styles.td}>{title}</td>
+                          <td style={styles.tdRight}>{formatScore(score)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section style={styles.section}>
+            <h3 style={styles.sectionTitle}>Overall Evidence / Additional Details</h3>
+            <div style={styles.textBlock}>
+              {overallEvidence && String(overallEvidence).trim()
+                ? overallEvidence
+                : "No additional details provided."}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Navbar({ theme, username, onLogoClick, onDownloadPDF }) {
+  return (
+    <header
+      style={{
+        ...styles.navbar,
+        background: theme.navBg,
+        borderBottom: `1px solid ${theme.border}`,
+      }}
+    >
+      <div style={styles.navInner}>
+        <button onClick={onLogoClick} style={styles.logoButton}>
+          <img src={logo} alt="SME Scoring" style={styles.logoImg} />
+          <div style={styles.logoTextWrap}>
+            <div style={{ ...styles.logoTitle, color: theme.text }}>SME Scoring</div>
+            <div style={{ ...styles.logoSubtitle, color: theme.muted }}>
+              Decision Support Platform
+            </div>
+          </div>
+        </button>
+
+        <div style={styles.navActions}>
           <button
+            type="button"
+            onClick={onDownloadPDF}
             style={{
-              ...styles.backBtn,
-              background: theme.card,
+              ...styles.downloadBtn,
+              background: theme.button,
+              color: "#FFFFFF",
+            }}
+          >
+            Download PDF
+          </button>
+
+          <div
+            style={{
+              ...styles.avatar,
+              background: theme.avatarBg,
               color: theme.text,
               border: `1px solid ${theme.border}`,
             }}
-            onClick={() => navigate("/evaluator-home")}
           >
-            ← Back
-          </button>
+            {(username || "U").charAt(0).toUpperCase()}
+          </div>
         </div>
-
-        {/* header card */}
-        <section
-          style={{
-            ...styles.heroCard,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <div style={styles.heroLeft}>
-            <div style={styles.reportTag}>SME REPORT</div>
-            <h1 style={styles.title}>{data.name}</h1>
-            <div style={styles.subGrid}>
-              <div style={styles.subItem}>
-                <span style={styles.subLabel}>BR Number</span>
-                <span style={styles.subValue}>{data.br_number}</span>
-              </div>
-              <div style={styles.subItem}>
-                <span style={styles.subLabel}>Industry</span>
-                <span style={styles.subValue}>{data.industry || "—"}</span>
-              </div>
-              <div style={styles.subItem}>
-                <span style={styles.subLabel}>Scored By</span>
-                <span style={styles.subValue}>{data.scored_by || username || "—"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              ...styles.scoreCircleWrap,
-              border: `6px solid ${scoreColor}`,
-            }}
-          >
-            <div style={styles.scoreNumber}>{totalScore}</div>
-            <div style={{ ...styles.scoreText, color: scoreColor }}>{scoreLabel}</div>
-          </div>
-        </section>
-
-        {/* summary cards */}
-        <section style={styles.statsGrid}>
-          <div
-            style={{
-              ...styles.infoCard,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
-            <div style={styles.cardLabel}>Report Status</div>
-            <div style={styles.cardValue}>Completed</div>
-          </div>
-
-          <div
-            style={{
-              ...styles.infoCard,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
-            <div style={styles.cardLabel}>Total Score</div>
-            <div style={styles.cardValue}>{totalScore}</div>
-          </div>
-
-          <div
-            style={{
-              ...styles.infoCard,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
-            <div style={styles.cardLabel}>Evaluation Result</div>
-            <div style={{ ...styles.cardValue, color: scoreColor }}>{scoreLabel}</div>
-          </div>
-        </section>
-
-        {/* details */}
-        <section
-          style={{
-            ...styles.detailsCard,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <h3 style={styles.sectionTitle}>SME Details</h3>
-
-          <div style={styles.detailsGrid}>
-            <div style={styles.detailBox}>
-              <div style={styles.detailTitle}>Business Name</div>
-              <div style={styles.detailText}>{data.name}</div>
-            </div>
-
-            <div style={styles.detailBox}>
-              <div style={styles.detailTitle}>BR Number</div>
-              <div style={styles.detailText}>{data.br_number}</div>
-            </div>
-
-            <div style={styles.detailBox}>
-              <div style={styles.detailTitle}>Industry</div>
-              <div style={styles.detailText}>{data.industry || "—"}</div>
-            </div>
-
-            <div style={styles.detailBox}>
-              <div style={styles.detailTitle}>Evaluator</div>
-              <div style={styles.detailText}>{data.scored_by || "—"}</div>
-            </div>
-          </div>
-        </section>
-
-        {/* actions */}
-        <section
-          style={{
-            ...styles.actionCard,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <h3 style={styles.sectionTitle}>Actions</h3>
-
-          <div style={styles.actionButtons}>
-            <button
-              style={{ ...styles.primaryBtn, background: theme.button }}
-              onClick={() => navigate("/evaluator-home")}
-            >
-              Go Home
-            </button>
-
-            {data.is_editable && (
-              <button
-                style={{ ...styles.secondaryBtn, border: `1px solid ${theme.border}`, color: theme.text }}
-                onClick={() => navigate(`/smes/${id}/score?edit=1`)}
-              >
-                Edit Report
-              </button>
-            )}
-          </div>
-
-          {!data.is_editable && (
-            <div style={styles.noteText}>
-              This report can only be edited by the evaluator who created it.
-            </div>
-          )}
-        </section>
       </div>
-    </div>
+    </header>
   );
 }
 
@@ -273,193 +324,217 @@ const darkTheme = {
   bg: "#0B1220",
   card: "#172033",
   text: "#FFFFFF",
+  muted: "rgba(255,255,255,0.72)",
   border: "rgba(255,255,255,0.10)",
   button: BRAND,
+  navBg: "#FFFFFF",
+  avatarBg: "rgba(255,255,255,0.06)",
 };
 
 const lightTheme = {
   bg: "#F6F8FB",
   card: "#FFFFFF",
   text: "#0F172A",
+  muted: "rgba(15,23,42,0.68)",
   border: "rgba(15,23,42,0.10)",
   button: BRAND,
+  navBg: "#FFFFFF",
+  avatarBg: "#F1F5F9",
 };
 
 const styles = {
   page: {
     minHeight: "100vh",
-    padding: "28px",
     fontFamily: "Arial, sans-serif",
   },
-  container: {
-    width: "min(1100px, 95%)",
-    margin: "0 auto",
+  navbar: {
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    width: "100%",
   },
-  centerBox: {
-    maxWidth: 500,
+  navInner: {
+    width: "min(1280px, 96%)",
+    margin: "0 auto",
+    minHeight: 92,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 20,
+    padding: "14px 0",
+  },
+  logoButton: {
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    padding: 0,
+  },
+  logoImg: {
+    width: 120,
+    height: "auto",
+    objectFit: "contain",
+  },
+  logoTextWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+  },
+  logoTitle: {
+    fontSize: 24,
+    fontWeight: 800,
+    lineHeight: 1.1,
+  },
+  logoSubtitle: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  navActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+  downloadBtn: {
+    border: "none",
+    borderRadius: 10,
+    padding: "12px 18px",
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 800,
+    fontSize: 28,
+  },
+  wrapper: {
+    width: "min(1180px, 95%)",
+    margin: "0 auto",
+    padding: "28px 0 40px",
+  },
+  messageBox: {
+    maxWidth: 520,
     margin: "120px auto",
     padding: 24,
     borderRadius: 16,
     textAlign: "center",
     fontSize: 18,
   },
-  topActions: {
-    display: "flex",
-    justifyContent: "flex-start",
-    marginBottom: 20,
-  },
-  backBtn: {
-    border: "none",
-    padding: "11px 16px",
-    borderRadius: 12,
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 14,
-  },
-  heroCard: {
-    borderRadius: 24,
-    padding: 28,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 24,
-    flexWrap: "wrap",
+  reportSheet: {
+    borderRadius: 20,
+    padding: 34,
     boxShadow: "0 10px 28px rgba(0,0,0,0.06)",
   },
-  heroLeft: {
-    flex: 1,
-    minWidth: 260,
-  },
-  reportTag: {
-    fontSize: 12,
-    fontWeight: 800,
-    letterSpacing: "1px",
-    opacity: 0.7,
-    marginBottom: 10,
-  },
-  title: {
-    margin: "0 0 18px 0",
-    fontSize: 34,
-    lineHeight: 1.2,
-  },
-  subGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: 14,
-  },
-  subItem: {
+  reportHeader: {
     display: "flex",
-    flexDirection: "column",
-    gap: 6,
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 20,
+    borderBottom: "1px solid rgba(127,127,127,0.18)",
+    paddingBottom: 22,
+    marginBottom: 28,
+    flexWrap: "wrap",
   },
-  subLabel: {
-    fontSize: 13,
-    opacity: 0.7,
-  },
-  subValue: {
-    fontSize: 16,
-    fontWeight: 700,
-  },
-  scoreCircleWrap: {
-    width: 180,
-    height: 180,
-    borderRadius: "50%",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "rgba(255,255,255,0.02)",
-  },
-  scoreNumber: {
-    fontSize: 34,
+  reportTitle: {
+    fontSize: 30,
     fontWeight: 800,
+    marginBottom: 6,
   },
-  scoreText: {
-    marginTop: 8,
-    fontWeight: 700,
-    fontSize: 15,
-  },
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 18,
-    marginTop: 22,
-  },
-  infoCard: {
-    borderRadius: 20,
-    padding: 22,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.05)",
-  },
-  cardLabel: {
+  reportSubtitle: {
     fontSize: 14,
+    opacity: 0.75,
+  },
+  scoreBox: {
+    minWidth: 170,
+    padding: 18,
+    borderRadius: 14,
+    background: "rgba(47,150,180,0.08)",
+    textAlign: "center",
+  },
+  scoreBoxLabel: {
+    fontSize: 13,
     opacity: 0.75,
     marginBottom: 8,
   },
-  cardValue: {
-    fontSize: 28,
+  scoreBoxValue: {
+    fontSize: 30,
     fontWeight: 800,
   },
-  detailsCard: {
-    marginTop: 22,
-    borderRadius: 22,
-    padding: 24,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.05)",
+  section: {
+    marginBottom: 30,
   },
   sectionTitle: {
-    marginTop: 0,
-    marginBottom: 18,
-    fontSize: 22,
+    fontSize: 21,
+    fontWeight: 800,
+    margin: "0 0 16px 0",
   },
-  detailsGrid: {
+  infoTable: {
+    border: "1px solid rgba(127,127,127,0.18)",
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  infoRow: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 16,
+    gridTemplateColumns: "220px 1fr",
+    borderBottom: "1px solid rgba(127,127,127,0.12)",
   },
-  detailBox: {
-    padding: 18,
-    borderRadius: 16,
+  infoLabel: {
+    padding: "14px 16px",
+    fontWeight: 700,
     background: "rgba(127,127,127,0.06)",
   },
-  detailTitle: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginBottom: 8,
+  infoValue: {
+    padding: "14px 16px",
   },
-  detailText: {
-    fontSize: 17,
-    fontWeight: 700,
+  tableWrap: {
+    overflowX: "auto",
+    border: "1px solid rgba(127,127,127,0.18)",
+    borderRadius: 14,
   },
-  actionCard: {
-    marginTop: 22,
-    borderRadius: 22,
-    padding: 24,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.05)",
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
   },
-  actionButtons: {
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  primaryBtn: {
-    border: "none",
-    color: "#fff",
-    padding: "12px 18px",
-    borderRadius: 12,
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 15,
-  },
-  secondaryBtn: {
-    background: "transparent",
-    padding: "12px 18px",
-    borderRadius: 12,
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 15,
-  },
-  noteText: {
-    marginTop: 14,
+  th: {
+    textAlign: "left",
+    padding: "14px 16px",
     fontSize: 14,
-    opacity: 0.8,
+    background: "rgba(127,127,127,0.08)",
+    borderBottom: "1px solid rgba(127,127,127,0.18)",
+  },
+  thRight: {
+    textAlign: "right",
+    padding: "14px 16px",
+    fontSize: 14,
+    background: "rgba(127,127,127,0.08)",
+    borderBottom: "1px solid rgba(127,127,127,0.18)",
+  },
+  td: {
+    padding: "14px 16px",
+    borderBottom: "1px solid rgba(127,127,127,0.10)",
+    fontSize: 15,
+  },
+  tdRight: {
+    padding: "14px 16px",
+    borderBottom: "1px solid rgba(127,127,127,0.10)",
+    fontSize: 15,
+    textAlign: "right",
+    fontWeight: 700,
+  },
+  textBlock: {
+    border: "1px solid rgba(127,127,127,0.18)",
+    borderRadius: 14,
+    padding: 18,
+    lineHeight: 1.7,
+    whiteSpace: "pre-wrap",
+    background: "rgba(127,127,127,0.04)",
+    fontSize: 15,
   },
 };

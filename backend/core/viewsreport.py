@@ -6,6 +6,11 @@ from rest_framework.permissions import IsAuthenticated
 from .models import SME, SMECriterionScore, CriterionWeight
 from .views import _get_evaluator_profile_or_403, _get_sme_or_404, _compute_capability_excel
 from decimal import Decimal
+from django.http import FileResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from io import BytesIO
+
 
 
 class SMEReportView(APIView):
@@ -58,3 +63,59 @@ class SMEReportView(APIView):
             "weaknesses": weaknesses,
             "capability_score": capability,
         })
+class SMEReportPDFView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        profile, err = _get_evaluator_profile_or_403(request)
+        if err:
+            return err
+
+        sme = _get_sme_or_404(pk, profile.bank)
+        if not sme:
+            return Response({"detail": "SME not found."}, status=404)
+
+        weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
+        weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
+
+        score_rows = SMECriterionScore.objects.filter(
+            sme=sme,
+            evaluator=profile.user
+        ).order_by("criterion_code")
+
+        scores_by_code = {
+            s.criterion_code: {
+                "score": s.score,
+            }
+            for s in score_rows
+        }
+
+        capability, rows, weaknesses = _compute_capability_excel(
+            scores_by_code,
+            weights_by_code
+        )
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(50, 800, "SME Evaluation Report")
+
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(50, 760, f"SME Name: {sme.name}")
+        pdf.drawString(50, 740, f"BR Number: {sme.br_number}")
+        pdf.drawString(50, 720, f"Industry: {sme.industry}")
+        pdf.drawString(
+            50,
+            700,
+            f"Score: {round(float(capability), 2) if capability is not None else '-'}"
+        )
+
+        pdf.save()
+        buffer.seek(0)
+
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f"SME_Report_{sme.br_number}.pdf"
+        )

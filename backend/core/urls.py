@@ -1,7 +1,7 @@
 # backend/core/urls.py
 
 from django.urls import path
-from .viewsreport import SMEReportView
+from .viewsreport import SMEReportPDFView, SMEReportView
 
 from .views import (
     health,
@@ -57,6 +57,7 @@ urlpatterns = [
 
     # SME scoring (old endpoint kept for compatibility)
     path("smes/<int:pk>/score/", SMEScoreUpdateView.as_view(), name="sme-score"),
-
+    #report views
     path("smes/<int:pk>/report/", SMEReportView.as_view(), name="sme-report"),
+    path("smes/<int:pk>/report/pdf/", SMEReportPDFView.as_view()),
 ]
