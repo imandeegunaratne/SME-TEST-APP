@@ -1,14 +1,11 @@
-// src/pages/EvaluatorHome.jsx (or EvaluatorLanding.jsx)
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 export default function EvaluatorHome() {
-  
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
 
-  /* ================= THEME ================= */
   const [themeMode] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved === "light" ? "light" : "dark";
@@ -19,7 +16,6 @@ export default function EvaluatorHome() {
     [themeMode]
   );
 
-  /* ================= STATE ================= */
   const [active, setActive] = useState("scoring");
 
   const [summary, setSummary] = useState({
@@ -29,31 +25,40 @@ export default function EvaluatorHome() {
     avg_score: 0,
   });
 
-  const [smes, setSmes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // Search by BR
   const [brSearch, setBrSearch] = useState("");
   const [found, setFound] = useState(null);
   const [searchMsg, setSearchMsg] = useState("");
 
-  // ✅ Always read token fresh (prevents stale/empty token issues)
-  function authHeaders() {
+  // profile dropdown
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const menuRef = useRef(null);
+
+  const [passwordForm, setPasswordForm] = useState({
+    old_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState("");
+
+  function authHeaders(extra = {}) {
     const tokenNow = localStorage.getItem("token");
     return {
       Authorization: `Token ${tokenNow}`,
+      ...extra,
     };
   }
 
-  /* ================= LOAD DATA ================= */
   async function loadData() {
     setLoading(true);
     setErr("");
 
     const tokenNow = localStorage.getItem("token");
 
-    // ✅ Basic guard
     if (!tokenNow) {
       setErr("You are not logged in.");
       setLoading(false);
@@ -61,28 +66,21 @@ export default function EvaluatorHome() {
       return;
     }
 
-    // ✅ Prevent bank admin from entering evaluator page
     if (role === "BANK_ADMIN") {
       navigate("/bank-admin-dashboard");
       return;
     }
 
     try {
-      const [s1, s2] = await Promise.all([
-        fetch("/api/evaluator/summary/", { headers: authHeaders() }),
-        fetch("/api/evaluator/smes/", { headers: authHeaders() }),
-      ]);
-
-    
+      const s1 = await fetch("/api/evaluator/summary/", {
+        headers: authHeaders(),
+      });
 
       const sum = await s1.json().catch(() => ({}));
-      const list = await s2.json().catch(() => []);
 
       if (!s1.ok) throw new Error(sum.detail || "Failed to load summary.");
-      if (!s2.ok) throw new Error(list.detail || "Failed to load SMEs.");
 
       setSummary(sum);
-      setSmes(Array.isArray(list) ? list : []);
     } catch (e) {
       setErr(e.message || "Something went wrong.");
     } finally {
@@ -95,7 +93,17 @@ export default function EvaluatorHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ================= SEARCH SME ================= */
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowProfileMenu(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   async function searchByBR() {
     setSearchMsg("");
     setFound(null);
@@ -133,25 +141,116 @@ export default function EvaluatorHome() {
     }
   }
 
-  /* ================= RENDER ================= */
+  function handleLogout() {
+    localStorage.clear();
+    navigate("/login");
+  }
+
+  function openPasswordModal() {
+    setShowProfileMenu(false);
+    setShowPasswordModal(true);
+    setPasswordMsg("");
+    setPasswordForm({
+      old_password: "",
+      new_password: "",
+      confirm_password: "",
+    });
+  }
+
+  function handlePasswordInput(e) {
+    const { name, value } = e.target;
+    setPasswordForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPasswordMsg("");
+
+    if (!passwordForm.old_password || !passwordForm.new_password || !passwordForm.confirm_password) {
+      setPasswordMsg("Please fill all password fields.");
+      return;
+    }
+
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordMsg("New password and confirm password do not match.");
+      return;
+    }
+
+    setPasswordSaving(true);
+
+    try {
+      const res = await fetch("/api/evaluator/change-password/", {
+        method: "POST",
+        headers: authHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          old_password: passwordForm.old_password,
+          new_password: passwordForm.new_password,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to change password.");
+      }
+
+      setPasswordMsg("Password changed successfully.");
+
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        localStorage.clear();
+        navigate("/login");
+      }, 1200);
+    } catch (e) {
+      setPasswordMsg(e.message || "Failed to change password.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  const username = localStorage.getItem("username") || "E";
+
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      {/* NAVBAR */}
-      <header style={{ ...styles.navbar, background: theme.navBg }}>
-        <div style={styles.brand} onClick={() => navigate("/")}>
-          <img src={logo} alt="logo" style={styles.logoImg} />
-          <div>
-            <div style={styles.brandTitle}>SME Scoring</div>
-            <div style={styles.brandSub}>Decision Support Platform</div>
-          </div>
-        </div>
+      <header
+        style={{
+          ...styles.navbar,
+          background: theme.navBg,
+          borderBottom: `1px solid ${theme.border}`,
+        }}
+      >
+        
+       <div
+  style={styles.brand}
+  onClick={() => navigate("/evaluator-home")}
+>
+  <img src={logo} alt="SME logo" style={styles.logoImg} />
+
+  <div style={styles.brandTextWrap}>
+    <div style={{ ...styles.brandTitle, color: theme.text }}>
+      SME Scoring
+    </div>
+    <div style={{ ...styles.brandSub, color: theme.subText }}>
+      Decision Support Platform
+    </div>
+  </div>
+</div>
+       
 
         <div style={styles.centerTabs}>
           <button
             style={{
-              ...styles.tabBtn,
-              background: active === "scoring" ? theme.tabActiveBg : "transparent",
+              ...styles.navBtn,
               color: theme.text,
+              borderBottom:
+                active === "scoring"
+                  ? `3px solid ${theme.button}`
+                  : "3px solid transparent",
             }}
             onClick={() => setActive("scoring")}
           >
@@ -160,26 +259,67 @@ export default function EvaluatorHome() {
 
           <button
             style={{
-              ...styles.tabBtn,
-              background: active === "dashboard" ? theme.tabActiveBg : "transparent",
+              ...styles.navBtn,
               color: theme.text,
+              borderBottom:
+                active === "dashboard"
+                  ? `3px solid ${theme.button}`
+                  : "3px solid transparent",
             }}
             onClick={() => setActive("dashboard")}
           >
             Dashboard
           </button>
         </div>
+
+        <div style={styles.rightWrap}>
+          <div style={{ position: "relative" }} ref={menuRef}>
+            <button
+              style={{
+                ...styles.profileBtn,
+                background: theme.profileBg,
+                color: theme.text,
+                border: `1px solid ${theme.border}`,
+              }}
+              onClick={() => setShowProfileMenu((prev) => !prev)}
+              title="Profile"
+            >
+              {username.charAt(0).toUpperCase()}
+            </button>
+
+            {showProfileMenu && (
+              <div
+                style={{
+                  ...styles.dropdown,
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
+                }}
+              >
+                <button style={styles.dropdownItem} onClick={openPasswordModal}>
+                  Change Password
+                </button>
+                <button style={styles.dropdownItem} onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       <main style={styles.main}>
-        {err && <div style={{ color: "red", marginBottom: 12 }}>{err}</div>}
+        {err && <div style={styles.errorText}>{err}</div>}
 
-        {/* ================= SCORING TAB ================= */}
         {active === "scoring" && (
           <>
-            {/* REGISTER CARD */}
-            <section style={{ ...styles.card, background: theme.card }}>
-              <h3>Register SME</h3>
+            <section
+              style={{
+                ...styles.card,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+              }}
+            >
+              <h3 style={styles.cardTitle}>Register SME</h3>
               <button
                 style={{ ...styles.primaryBtn, background: theme.button }}
                 onClick={() => navigate("/sme-register")}
@@ -188,24 +328,33 @@ export default function EvaluatorHome() {
               </button>
             </section>
 
-            {/* SEARCH CARD */}
-            <section style={{ ...styles.card, background: theme.card, marginTop: 16 }}>
-              <h3>Search & Score SME</h3>
+            <section
+              style={{
+                ...styles.card,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+                marginTop: 20,
+              }}
+            >
+              <h3 style={styles.cardTitle}>Search & Score SME</h3>
 
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={styles.searchRow}>
                 <input
                   value={brSearch}
                   onChange={(e) => setBrSearch(e.target.value)}
                   placeholder="Enter BR number"
-                  style={styles.search}
+                  style={{
+                    ...styles.search,
+                    background: theme.inputBg,
+                    color: theme.text,
+                    border: `1px solid ${theme.border}`,
+                  }}
                 />
 
                 <button
                   style={{
-                    ...styles.smallBtn,
+                    ...styles.searchBtn,
                     background: theme.button,
-                    color: "#fff",
-                    border: "none",
                   }}
                   onClick={searchByBR}
                 >
@@ -213,23 +362,27 @@ export default function EvaluatorHome() {
                 </button>
               </div>
 
-              {searchMsg && <div style={{ marginTop: 10 }}>{searchMsg}</div>}
+              {searchMsg && <div style={styles.msgText}>{searchMsg}</div>}
 
               {found && (
-                <div style={{ ...styles.row, marginTop: 14 }}>
+                <div
+                  style={{
+                    ...styles.resultRow,
+                    border: `1px solid ${theme.border}`,
+                    background: theme.resultBg,
+                  }}
+                >
                   <div>
-                    <b>{found.name}</b>
-                    <div style={{ fontSize: 12 }}>BR: {found.br_number}</div>
+                    <div style={styles.smeName}>{found.name}</div>
+                    <div style={styles.smeSub}>BR: {found.br_number}</div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 10 }}>
+                  <div style={styles.actionWrap}>
                     {!found.is_scored && (
                       <button
                         style={{
-                          ...styles.smallBtn,
+                          ...styles.smallPrimaryBtn,
                           background: theme.button,
-                          color: "#fff",
-                          border: "none",
                         }}
                         onClick={() => navigate(`/smes/${found.id}/score`)}
                       >
@@ -239,7 +392,12 @@ export default function EvaluatorHome() {
 
                     {found.is_scored && (
                       <button
-                        style={styles.smallBtn}
+                        style={{
+                          ...styles.smallOutlineBtn,
+                          color: theme.text,
+                          border: `1px solid ${theme.border}`,
+                          background: "transparent",
+                        }}
                         onClick={() => navigate(`/smes/${found.id}/report`)}
                       >
                         View Report
@@ -252,114 +410,446 @@ export default function EvaluatorHome() {
           </>
         )}
 
-        {/* ================= DASHBOARD TAB ================= */}
         {active === "dashboard" && (
-          <section style={{ ...styles.card, background: theme.card }}>
-            <h3>Dashboard</h3>
+          <section
+            style={{
+              ...styles.card,
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+            }}
+          >
+            <h3 style={styles.cardTitle}>Dashboard</h3>
+
             {loading ? (
               <div>Loading...</div>
             ) : (
-              <>
-                <div>Total SMEs: {summary.total_smes}</div>
-                <div>Scored: {summary.scored_smes}</div>
-                <div>Pending: {summary.pending_smes}</div>
-                <div>Average Score: {summary.avg_score}</div>
-              </>
+              <div style={styles.statsGrid}>
+                <div style={{ ...styles.statCard, background: theme.statCard }}>
+                  <div style={styles.statLabel}>Total SMEs</div>
+                  <div style={styles.statValue}>{summary.total_smes}</div>
+                </div>
+
+                <div style={{ ...styles.statCard, background: theme.statCard }}>
+                  <div style={styles.statLabel}>Scored SMEs</div>
+                  <div style={styles.statValue}>{summary.scored_smes}</div>
+                </div>
+
+                <div style={{ ...styles.statCard, background: theme.statCard }}>
+                  <div style={styles.statLabel}>Pending SMEs</div>
+                  <div style={styles.statValue}>{summary.pending_smes}</div>
+                </div>
+
+                <div style={{ ...styles.statCard, background: theme.statCard }}>
+                  <div style={styles.statLabel}>Average Score</div>
+                  <div style={styles.statValue}>{summary.avg_score}</div>
+                </div>
+              </div>
             )}
           </section>
         )}
       </main>
+
+      {showPasswordModal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalCard, background: theme.card, color: theme.text }}>
+            <div style={styles.modalTop}>
+              <h3 style={{ margin: 0 }}>Change Password</h3>
+              <button
+                style={styles.closeBtn}
+                onClick={() => setShowPasswordModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword}>
+              <label style={styles.label}>Old Password</label>
+              <input
+                type="password"
+                name="old_password"
+                value={passwordForm.old_password}
+                onChange={handlePasswordInput}
+                style={{
+                  ...styles.input,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
+
+              <label style={styles.label}>New Password</label>
+              <input
+                type="password"
+                name="new_password"
+                value={passwordForm.new_password}
+                onChange={handlePasswordInput}
+                style={{
+                  ...styles.input,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
+
+              <label style={styles.label}>Confirm New Password</label>
+              <input
+                type="password"
+                name="confirm_password"
+                value={passwordForm.confirm_password}
+                onChange={handlePasswordInput}
+                style={{
+                  ...styles.input,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
+
+              {passwordMsg && <div style={styles.passwordMsg}>{passwordMsg}</div>}
+
+              <div style={styles.modalActions}>
+                <button
+                  type="button"
+                  style={styles.cancelBtn}
+                  onClick={() => setShowPasswordModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ ...styles.primaryBtn, background: theme.button }}
+                  disabled={passwordSaving}
+                >
+                  {passwordSaving ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-/* ================= STYLES ================= */
 
 const BRAND = "#2F96B4";
 
 const darkTheme = {
   bg: "#0B1220",
-  navBg: "#172033",
+  navBg: "#101826",
   card: "#172033",
+  statCard: "#0f172a",
+  resultBg: "#111827",
+  inputBg: "#0f172a",
   text: "#ffffff",
   button: BRAND,
-  tabActiveBg: "rgba(255,255,255,0.05)",
+  border: "rgba(255,255,255,0.10)",
+  profileBg: "#172033",
 };
 
 const lightTheme = {
-  bg: "#F4F8FB",
+  bg: "#F6F8FB",
   navBg: "#ffffff",
   card: "#ffffff",
+  statCard: "#F8FAFC",
+  resultBg: "#F8FAFC",
+  inputBg: "#ffffff",
   text: "#0F172A",
   button: BRAND,
-  tabActiveBg: "rgba(0,0,0,0.05)",
+  border: "rgba(15,23,42,0.10)",
+  profileBg: "#F1F5F9",
 };
 
 const styles = {
   page: {
     minHeight: "100vh",
-    fontFamily: "system-ui",
+    fontFamily: "Arial, sans-serif",
   },
   navbar: {
-    padding: "14px 5%",
+    height: 92,
+    padding: "0 40px",
+    display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
+    alignItems: "center",
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+  },
+  leftWrap: {
     display: "flex",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
   },
-  brand: {
+  centerTabs: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 34,
+  },
+  rightWrap: {
+    display: "flex",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  logoButton: {
+    background: "transparent",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    cursor: "pointer",
   },
   logoImg: {
-    width: 80,
-    height: 50,
+    width: 88,
+    height: 70,
+    objectFit: "contain",
   },
-  brandTitle: { fontWeight: 900 },
-  brandSub: { fontSize: 12 },
-  centerTabs: { display: "flex", gap: 10 },
-  tabBtn: {
-    padding: "8px 14px",
-    borderRadius: 999,
+  navBtn: {
+    background: "transparent",
     border: "none",
     cursor: "pointer",
+    fontSize: 18,
     fontWeight: 700,
+    padding: "10px 2px",
+  },
+  profileBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: "50%",
+    cursor: "pointer",
+    fontSize: 18,
+    fontWeight: 800,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdown: {
+    position: "absolute",
+    top: 58,
+    right: 0,
+    minWidth: 180,
+    borderRadius: 14,
+    boxShadow: "0 12px 30px rgba(0,0,0,0.12)",
+    overflow: "hidden",
+  },
+  dropdownItem: {
+    width: "100%",
+    padding: "12px 14px",
+    border: "none",
+    background: "transparent",
+    textAlign: "left",
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
   },
   main: {
     width: "min(1100px, 92%)",
-    margin: "20px auto",
+    margin: "28px auto",
   },
   card: {
-    padding: 16,
-    borderRadius: 16,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
+    padding: 24,
+    borderRadius: 20,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+  },
+  cardTitle: {
+    marginTop: 0,
+    marginBottom: 18,
+    fontSize: 22,
+  },
+  searchRow: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
   },
   search: {
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid #ccc",
     flex: 1,
+    padding: "14px 16px",
+    borderRadius: 14,
+    outline: "none",
+    fontSize: 15,
   },
-  row: {
-    padding: 12,
-    borderRadius: 12,
-    border: "1px solid #ddd",
+  searchBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "14px 18px",
+    borderRadius: 14,
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  resultRow: {
+    marginTop: 18,
+    padding: 16,
+    borderRadius: 16,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
+  smeName: {
+    fontSize: 18,
+    fontWeight: 700,
+  },
+  smeSub: {
+    fontSize: 13,
+    marginTop: 4,
+    opacity: 0.8,
+  },
+  actionWrap: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+  },
   primaryBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "12px 18px",
+    borderRadius: 12,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 15,
+  },
+  smallPrimaryBtn: {
+    border: "none",
+    color: "#fff",
     padding: "10px 14px",
     borderRadius: 12,
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  smallOutlineBtn: {
+    padding: "10px 14px",
+    borderRadius: 12,
+    cursor: "pointer",
+    fontWeight: 700,
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 18,
+    marginTop: 18,
+  },
+  statCard: {
+    padding: 20,
+    borderRadius: 18,
+  },
+  statLabel: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginBottom: 10,
+  },
+  statValue: {
+    fontSize: 32,
+    fontWeight: 800,
+  },
+  msgText: {
+    marginTop: 12,
+  },
+  errorText: {
+    color: "red",
+    marginBottom: 16,
+  },
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 460,
+    borderRadius: 20,
+    padding: 24,
+    boxShadow: "0 16px 40px rgba(0,0,0,0.2)",
+  },
+  modalTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  closeBtn: {
     border: "none",
+    background: "transparent",
+    fontSize: 28,
     cursor: "pointer",
-    color: "#fff",
+    lineHeight: 1,
   },
-  smallBtn: {
-    padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid #ccc",
+  label: {
+    display: "block",
+    marginBottom: 8,
+    marginTop: 14,
+    fontWeight: 600,
+  },
+  input: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 12,
+    outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
+  },
+  passwordMsg: {
+    marginTop: 14,
+    fontSize: 14,
+  },
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 22,
+  },
+  cancelBtn: {
+    padding: "12px 18px",
+    borderRadius: 12,
+    border: "1px solid #cbd5e1",
+    background: "#fff",
     cursor: "pointer",
+    fontWeight: 700,
   },
+  brand: {
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  cursor: "pointer",
+  minWidth: 260,
+},
+
+brandTextWrap: {
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  lineHeight: 1.05,
+},
+
+brandTitle: {
+  fontSize: 24,
+  fontWeight: 800,
+  letterSpacing: "-0.4px",
+  marginBottom: 4,
+},
+
+brandSub: {
+  fontSize: 14,
+  fontWeight: 500,
+},
+
+logoImg: {
+  width: 120,
+  height: 62,
+  objectFit: "contain",
+  display: "block",
+},
+
+navbar: {
+  height: 100,
+  padding: "0 22px",
+  display: "grid",
+  gridTemplateColumns: "1fr auto 1fr",
+  alignItems: "center",
+  position: "sticky",
+  top: 0,
+  zIndex: 10,
+},
 };

@@ -9,6 +9,7 @@ import SMEReport from "./pages/SMEReport";
 import SMEScore from "./pages/Scoring";
 import BankAdminDashboard from "./pages/BankAdminDashbord";
 import Results from "./pages/Results";
+import EvaluatorProfile from "./pages/EvaluatorProfile";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -74,6 +75,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/evaluator-profile"
+           element={
+            <ProtectedRoute allowRoles={["EVALUATOR"]}>
+          <EvaluatorProfile />
+        </ProtectedRoute>
+      }
+/>
       </Routes>
     </BrowserRouter>
   );
