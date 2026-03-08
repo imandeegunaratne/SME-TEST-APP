@@ -16,6 +16,8 @@ export default function EvaluatorHome() {
     [themeMode]
   );
 
+  const [activeTab, setActiveTab] = useState("home");
+
   const [summary, setSummary] = useState({
     total_smes: 0,
     scored_smes: 0,
@@ -25,13 +27,20 @@ export default function EvaluatorHome() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const [brSearch, setBrSearch] = useState("");
-  const [found, setFound] = useState(null);
-  const [searchMsg, setSearchMsg] = useState("");
+  const [homeSearch, setHomeSearch] = useState("");
+  const [homeFound, setHomeFound] = useState(null);
+  const [homeSearchMsg, setHomeSearchMsg] = useState("");
+
+  const [scoreSearch, setScoreSearch] = useState("");
+  const [scoreFound, setScoreFound] = useState(null);
+  const [scoreSearchMsg, setScoreSearchMsg] = useState("");
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const menuRef = useRef(null);
+
+  const profileRef = useRef(null);
+  const notifyRef = useRef(null);
 
   const [passwordForm, setPasswordForm] = useState({
     old_password: "",
@@ -40,6 +49,15 @@ export default function EvaluatorHome() {
   });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState("");
+
+  const [allSMEs, setAllSMEs] = useState([]);
+  const [comparisonList, setComparisonList] = useState([]);
+
+  const notifications = [
+    "2 SMEs pending scoring",
+    "1 incomplete scoring available",
+    "New SME ready for evaluation",
+  ];
 
   function authHeaders(extra = {}) {
     const tokenNow = localStorage.getItem("token");
@@ -73,7 +91,6 @@ export default function EvaluatorHome() {
       });
 
       const sum = await s1.json().catch(() => ({}));
-
       if (!s1.ok) throw new Error(sum.detail || "Failed to load summary.");
 
       setSummary({
@@ -81,6 +98,13 @@ export default function EvaluatorHome() {
         scored_smes: sum.scored_smes || 0,
         pending_smes: sum.pending_smes || 0,
       });
+
+      const s2 = await fetch("/api/smes/", {
+        headers: authHeaders(),
+      });
+
+      const smes = await s2.json().catch(() => []);
+      if (s2.ok) setAllSMEs(Array.isArray(smes) ? smes : []);
     } catch (e) {
       setErr(e.message || "Something went wrong.");
     } finally {
@@ -95,8 +119,11 @@ export default function EvaluatorHome() {
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
         setShowProfileMenu(false);
+      }
+      if (notifyRef.current && !notifyRef.current.contains(event.target)) {
+        setShowNotifications(false);
       }
     }
 
@@ -104,25 +131,25 @@ export default function EvaluatorHome() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  async function searchByBR() {
-    setSearchMsg("");
-    setFound(null);
+  async function searchHomeByBR() {
+    setHomeSearchMsg("");
+    setHomeFound(null);
 
     const tokenNow = localStorage.getItem("token");
     if (!tokenNow) {
-      setSearchMsg("You are not logged in.");
+      setHomeSearchMsg("You are not logged in.");
       navigate("/login");
       return;
     }
 
-    if (!brSearch.trim()) {
-      setSearchMsg("Please enter a BR number.");
+    if (!homeSearch.trim()) {
+      setHomeSearchMsg("Please enter a BR number.");
       return;
     }
 
     try {
       const res = await fetch(
-        `/api/smes/by-br/?br=${encodeURIComponent(brSearch)}`,
+        `/api/smes/by-br/?br=${encodeURIComponent(homeSearch.trim())}`,
         { headers: authHeaders() }
       );
 
@@ -135,9 +162,46 @@ export default function EvaluatorHome() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "SME not found.");
 
-      setFound(data);
+      setHomeFound(data);
     } catch (e) {
-      setSearchMsg(e.message || "Search failed.");
+      setHomeSearchMsg(e.message || "Search failed.");
+    }
+  }
+
+  async function searchScoreByBR() {
+    setScoreSearchMsg("");
+    setScoreFound(null);
+
+    const tokenNow = localStorage.getItem("token");
+    if (!tokenNow) {
+      setScoreSearchMsg("You are not logged in.");
+      navigate("/login");
+      return;
+    }
+
+    if (!scoreSearch.trim()) {
+      setScoreSearchMsg("Please enter a BR number.");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/smes/by-br/?br=${encodeURIComponent(scoreSearch.trim())}`,
+        { headers: authHeaders() }
+      );
+
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate("/login");
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "SME not found.");
+
+      setScoreFound(data);
+    } catch (e) {
+      setScoreSearchMsg(e.message || "Search failed.");
     }
   }
 
@@ -148,8 +212,8 @@ export default function EvaluatorHome() {
 
   function openPasswordModal() {
     setShowProfileMenu(false);
-    setShowPasswordModal(true);
     setPasswordMsg("");
+    setShowPasswordModal(true);
     setPasswordForm({
       old_password: "",
       new_password: "",
@@ -198,7 +262,6 @@ export default function EvaluatorHome() {
       });
 
       const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
         throw new Error(data.detail || "Failed to change password.");
       }
@@ -215,6 +278,25 @@ export default function EvaluatorHome() {
     } finally {
       setPasswordSaving(false);
     }
+  }
+
+  function toggleCompare(sme) {
+    const exists = comparisonList.find((x) => x.id === sme.id);
+    if (exists) {
+      setComparisonList((prev) => prev.filter((x) => x.id !== sme.id));
+    } else {
+      setComparisonList((prev) => [...prev, sme]);
+    }
+  }
+
+  function openComparison() {
+    if (comparisonList.length < 2) {
+      setErr("Select at least 2 SMEs for comparison.");
+      return;
+    }
+
+    const ids = comparisonList.map((x) => x.id).join(",");
+    navigate(`/sme-comparison?ids=${ids}`);
   }
 
   const username = localStorage.getItem("username") || "E";
@@ -235,26 +317,82 @@ export default function EvaluatorHome() {
               SME Scoring
             </div>
             <div style={{ ...styles.brandSub, color: theme.subText }}>
-              Decision Support Platform
+              Evaluator Workspace
             </div>
           </div>
         </div>
 
-        <div style={styles.headerCenterText}>Evaluator Workspace</div>
+        <div style={styles.tabWrap}>
+          {["home", "scoring", "evaluation"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                ...styles.tabBtn,
+                background: activeTab === tab ? theme.tabActiveBg : "transparent",
+                color: activeTab === tab ? theme.button : theme.text,
+                border:
+                  activeTab === tab
+                    ? `1px solid ${theme.tabActiveBorder}`
+                    : `1px solid transparent`,
+              }}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
 
         <div style={styles.rightWrap}>
-          <div style={{ position: "relative" }} ref={menuRef}>
+          <div style={styles.popupWrap} ref={notifyRef}>
             <button
+              onClick={() => setShowNotifications((v) => !v)}
+              style={{
+                ...styles.iconBtn,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+              }}
+            >
+              🔔
+            </button>
+
+            {showNotifications && (
+              <div
+                style={{
+                  ...styles.dropdown,
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
+                }}
+              >
+                <div style={styles.dropdownHead}>Notifications</div>
+                {notifications.map((item, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      ...styles.dropdownText,
+                      borderBottom:
+                        i !== notifications.length - 1
+                          ? `1px solid ${theme.border}`
+                          : "none",
+                    }}
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={styles.popupWrap} ref={profileRef}>
+            <button
+              onClick={() => setShowProfileMenu((v) => !v)}
               style={{
                 ...styles.profileBtn,
-                background: theme.profileBg,
-                color: theme.text,
-                border: `1px solid ${theme.border}`,
+                background: theme.button,
+                color: "#fff",
               }}
-              onClick={() => setShowProfileMenu((prev) => !prev)}
-              title="Profile"
             >
-              {username.charAt(0).toUpperCase()}
+              {username[0]?.toUpperCase() || "U"}
             </button>
 
             {showProfileMenu && (
@@ -265,10 +403,16 @@ export default function EvaluatorHome() {
                   border: `1px solid ${theme.border}`,
                 }}
               >
-                <button style={styles.dropdownItem} onClick={openPasswordModal}>
+                <button
+                  style={{ ...styles.dropdownItem, color: theme.text }}
+                  onClick={openPasswordModal}
+                >
                   Change Password
                 </button>
-                <button style={styles.dropdownItem} onClick={handleLogout}>
+                <button
+                  style={{ ...styles.dropdownItem, color: "#dc2626" }}
+                  onClick={handleLogout}
+                >
                   Logout
                 </button>
               </div>
@@ -291,210 +435,325 @@ export default function EvaluatorHome() {
           </div>
         )}
 
-        <section
-          style={{
-            ...styles.heroCard,
-            background: theme.heroBg,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <div style={styles.heroContent}>
-            <div
+        {activeTab === "home" && (
+          <>
+            <section style={styles.sectionBlock}>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Overview</h2>
+                <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                  Quick insight into SME activity
+                </p>
+              </div>
+
+              {loading ? (
+                <div style={{ color: theme.subText }}>Loading summary...</div>
+              ) : (
+                <div style={styles.statsGrid}>
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      background: theme.card,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.statIconWrap,
+                        background: theme.iconBg1,
+                      }}
+                    >
+                      📁
+                    </div>
+                    <div style={styles.statLabel}>Total SMEs</div>
+                    <div style={styles.statValue}>{summary.total_smes}</div>
+                  </div>
+
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      background: theme.card,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.statIconWrap,
+                        background: theme.iconBg2,
+                      }}
+                    >
+                      ✅
+                    </div>
+                    <div style={styles.statLabel}>Scored SMEs</div>
+                    <div style={styles.statValue}>{summary.scored_smes}</div>
+                  </div>
+
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      background: theme.card,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.statIconWrap,
+                        background: theme.iconBg3,
+                      }}
+                    >
+                      ⏳
+                    </div>
+                    <div style={styles.statLabel}>Pending SMEs</div>
+                    <div style={styles.statValue}>{summary.pending_smes}</div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section
               style={{
-                ...styles.heroBadge,
-                background: theme.badgeBg,
-                color: theme.button,
+                ...styles.searchCard,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
               }}
             >
-              Evaluator Panel
-            </div>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Search SME Report</h2>
+                <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                  Search an SME using the BR number and view the report only
+                </p>
+              </div>
 
-            <h1 style={{ ...styles.heroTitle, color: theme.text }}>
-              Manage SME scoring from one place
-            </h1>
+              <div style={styles.searchRow}>
+                <input
+                  value={homeSearch}
+                  onChange={(e) => setHomeSearch(e.target.value)}
+                  placeholder="Enter BR number"
+                  style={{
+                    ...styles.search,
+                    background: theme.inputBg,
+                    color: theme.text,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                />
 
-            <p style={{ ...styles.heroText, color: theme.subText }}>
-              Register new SMEs, search by BR number, continue scoring, and
-              track progress through a simple and professional workspace.
-            </p>
+                <button
+                  style={{
+                    ...styles.searchBtn,
+                    background: theme.button,
+                  }}
+                  onClick={searchHomeByBR}
+                >
+                  Search
+                </button>
+              </div>
 
-            <div style={styles.heroButtonRow}>
+              {homeSearchMsg && (
+                <div style={{ ...styles.inlineMessage, color: theme.subText }}>
+                  {homeSearchMsg}
+                </div>
+              )}
+
+              {homeFound && (
+                <div
+                  style={{
+                    ...styles.resultCard,
+                    background: theme.resultBg,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  <div style={styles.resultLeft}>
+                    <div style={styles.resultTitle}>{homeFound.name}</div>
+                    <div style={{ ...styles.resultSub, color: theme.subText }}>
+                      BR Number: {homeFound.br_number}
+                    </div>
+                  </div>
+
+                  <div style={styles.actionWrap}>
+                    <button
+                      style={{
+                        ...styles.smallPrimaryBtn,
+                        background: theme.button,
+                      }}
+                      onClick={() => navigate(`/smes/${homeFound.id}/report`)}
+                    >
+                      View Report
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {activeTab === "scoring" && (
+          <div style={styles.scoringGrid}>
+            <section
+              style={{
+                ...styles.panelCard,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+              }}
+            >
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Register SME</h2>
+                <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                  Add a new SME before starting the scoring process
+                </p>
+              </div>
+
+              <div style={styles.featureBox}>
+                <div style={styles.featureIcon}>🏢</div>
+                <div>
+                  <div style={styles.featureTitle}>New SME Registration</div>
+                  <div style={{ ...styles.featureText, color: theme.subText }}>
+                    Create a new SME record and continue the evaluation workflow.
+                  </div>
+                </div>
+              </div>
+
               <button
                 style={{ ...styles.primaryBtn, background: theme.button }}
                 onClick={() => navigate("/sme-register")}
               >
                 + Register New SME
               </button>
-            </div>
-          </div>
-        </section>
+            </section>
 
-        <section style={styles.sectionBlock}>
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Overview</h2>
-            <p style={{ ...styles.sectionSub, color: theme.subText }}>
-              Quick insight into SME activity
-            </p>
-          </div>
-
-          {loading ? (
-            <div style={{ color: theme.subText }}>Loading summary...</div>
-          ) : (
-            <div style={styles.statsGrid}>
-              <div
-                style={{
-                  ...styles.statCard,
-                  background: theme.card,
-                  border: `1px solid ${theme.border}`,
-                }}
-              >
-                <div
-                  style={{
-                    ...styles.statIconWrap,
-                    background: theme.iconBg1,
-                  }}
-                >
-                  📁
-                </div>
-                <div style={styles.statLabel}>Total SMEs</div>
-                <div style={styles.statValue}>{summary.total_smes}</div>
-              </div>
-
-              <div
-                style={{
-                  ...styles.statCard,
-                  background: theme.card,
-                  border: `1px solid ${theme.border}`,
-                }}
-              >
-                <div
-                  style={{
-                    ...styles.statIconWrap,
-                    background: theme.iconBg2,
-                  }}
-                >
-                  ✅
-                </div>
-                <div style={styles.statLabel}>Scored SMEs</div>
-                <div style={styles.statValue}>{summary.scored_smes}</div>
-              </div>
-
-              <div
-                style={{
-                  ...styles.statCard,
-                  background: theme.card,
-                  border: `1px solid ${theme.border}`,
-                }}
-              >
-                <div
-                  style={{
-                    ...styles.statIconWrap,
-                    background: theme.iconBg3,
-                  }}
-                >
-                  ⏳
-                </div>
-                <div style={styles.statLabel}>Pending SMEs</div>
-                <div style={styles.statValue}>{summary.pending_smes}</div>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section
-          style={{
-            ...styles.searchCard,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-          }}
-        >
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Search & Score SME</h2>
-            <p style={{ ...styles.sectionSub, color: theme.subText }}>
-              Search an SME using the BR number
-            </p>
-          </div>
-
-          <div style={styles.searchRow}>
-            <input
-              value={brSearch}
-              onChange={(e) => setBrSearch(e.target.value)}
-              placeholder="Enter BR number"
+            <section
               style={{
-                ...styles.search,
-                background: theme.inputBg,
-                color: theme.text,
-                border: `1px solid ${theme.border}`,
-              }}
-            />
-
-            <button
-              style={{
-                ...styles.searchBtn,
-                background: theme.button,
-              }}
-              onClick={searchByBR}
-            >
-              Search
-            </button>
-          </div>
-
-          {searchMsg && (
-            <div
-              style={{
-                ...styles.inlineMessage,
-                color: theme.subText,
-              }}
-            >
-              {searchMsg}
-            </div>
-          )}
-
-          {found && (
-            <div
-              style={{
-                ...styles.resultCard,
-                background: theme.resultBg,
+                ...styles.panelCard,
+                background: theme.card,
                 border: `1px solid ${theme.border}`,
               }}
             >
-              <div style={styles.resultLeft}>
-                <div style={styles.resultTitle}>{found.name}</div>
-                <div style={{ ...styles.resultSub, color: theme.subText }}>
-                  BR Number: {found.br_number}
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Search & Start Scoring</h2>
+                <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                  Search an SME by BR number and start scoring
+                </p>
+              </div>
+
+              <div style={styles.searchRow}>
+                <input
+                  value={scoreSearch}
+                  onChange={(e) => setScoreSearch(e.target.value)}
+                  placeholder="Enter BR number"
+                  style={{
+                    ...styles.search,
+                    background: theme.inputBg,
+                    color: theme.text,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                />
+
+                <button
+                  style={{
+                    ...styles.searchBtn,
+                    background: theme.button,
+                  }}
+                  onClick={searchScoreByBR}
+                >
+                  Search
+                </button>
+              </div>
+
+              {scoreSearchMsg && (
+                <div style={{ ...styles.inlineMessage, color: theme.subText }}>
+                  {scoreSearchMsg}
                 </div>
-              </div>
+              )}
 
-              <div style={styles.actionWrap}>
-                {!found.is_scored && (
-                  <button
-                    style={{
-                      ...styles.smallPrimaryBtn,
-                      background: theme.button,
-                    }}
-                    onClick={() => navigate(`/smes/${found.id}/score`)}
-                  >
-                    Start Scoring
-                  </button>
-                )}
+              {scoreFound && (
+                <div
+                  style={{
+                    ...styles.resultCard,
+                    background: theme.resultBg,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  <div style={styles.resultLeft}>
+                    <div style={styles.resultTitle}>{scoreFound.name}</div>
+                    <div style={{ ...styles.resultSub, color: theme.subText }}>
+                      BR Number: {scoreFound.br_number}
+                    </div>
+                  </div>
 
-                {found.is_scored && (
-                  <button
-                    style={{
-                      ...styles.smallOutlineBtn,
-                      color: theme.text,
-                      border: `1px solid ${theme.border}`,
-                      background: "transparent",
-                    }}
-                    onClick={() => navigate(`/smes/${found.id}/report`)}
-                  >
-                    View Report
-                  </button>
-                )}
-              </div>
+                  <div style={styles.actionWrap}>
+                    <button
+                      style={{
+                        ...styles.smallPrimaryBtn,
+                        background: theme.button,
+                      }}
+                      onClick={() => navigate(`/smes/${scoreFound.id}/score`)}
+                    >
+                      Start Scoring
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {activeTab === "evaluation" && (
+          <section
+            style={{
+              ...styles.searchCard,
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+            }}
+          >
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>SME Comparison</h2>
+              <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                Select two or more SMEs for comparison
+              </p>
             </div>
-          )}
-        </section>
+
+            <div style={styles.evalList}>
+              {allSMEs.map((sme) => {
+                const selected = comparisonList.some((x) => x.id === sme.id);
+                return (
+                  <div
+                    key={sme.id}
+                    style={{
+                      ...styles.resultCard,
+                      marginTop: 0,
+                      background: theme.resultBg,
+                      border: `1px solid ${selected ? theme.button : theme.border}`,
+                    }}
+                  >
+                    <div style={styles.resultLeft}>
+                      <div style={styles.resultTitle}>{sme.name}</div>
+                      <div style={{ ...styles.resultSub, color: theme.subText }}>
+                        BR Number: {sme.br_number}
+                      </div>
+                    </div>
+
+                    <button
+                      style={{
+                        ...styles.smallPrimaryBtn,
+                        background: selected ? "#16a34a" : theme.button,
+                      }}
+                      onClick={() => toggleCompare(sme)}
+                    >
+                      {selected ? "Selected" : "Add to Compare"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <button
+                style={{ ...styles.primaryBtn, background: theme.button }}
+                onClick={openComparison}
+              >
+                Compare Selected SMEs
+              </button>
+            </div>
+          </section>
+        )}
       </main>
 
       {showPasswordModal && (
@@ -611,19 +870,18 @@ const darkTheme = {
   card: "#172033",
   resultBg: "#111827",
   inputBg: "#0f172a",
-  heroBg: "linear-gradient(135deg, #172033 0%, #101826 55%, #0f172a 100%)",
   text: "#ffffff",
   subText: "rgba(255,255,255,0.72)",
   button: BRAND,
   border: "rgba(255,255,255,0.10)",
-  profileBg: "#172033",
-  badgeBg: "rgba(47,150,180,0.16)",
   iconBg1: "rgba(59,130,246,0.16)",
   iconBg2: "rgba(16,185,129,0.16)",
   iconBg3: "rgba(245,158,11,0.16)",
   errorBg: "rgba(220,38,38,0.10)",
   errorText: "#fecaca",
   errorBorder: "rgba(220,38,38,0.30)",
+  tabActiveBg: "rgba(47,150,180,0.12)",
+  tabActiveBorder: "rgba(47,150,180,0.24)",
 };
 
 const lightTheme = {
@@ -632,30 +890,29 @@ const lightTheme = {
   card: "#ffffff",
   resultBg: "#F8FAFC",
   inputBg: "#ffffff",
-  heroBg: "linear-gradient(135deg, #ffffff 0%, #eef7fb 60%, #f8fbff 100%)",
   text: "#0F172A",
   subText: "#475569",
   button: BRAND,
   border: "rgba(15,23,42,0.10)",
-  profileBg: "#F1F5F9",
-  badgeBg: "rgba(47,150,180,0.12)",
   iconBg1: "rgba(59,130,246,0.12)",
   iconBg2: "rgba(16,185,129,0.12)",
   iconBg3: "rgba(245,158,11,0.14)",
   errorBg: "#FEF2F2",
   errorText: "#B91C1C",
   errorBorder: "#FECACA",
+  tabActiveBg: "rgba(47,150,180,0.08)",
+  tabActiveBorder: "rgba(47,150,180,0.18)",
 };
 
 const styles = {
   page: {
     minHeight: "100vh",
-    fontFamily: "Arial, sans-serif",
+    fontFamily: "Inter, Arial, sans-serif",
   },
 
   navbar: {
-    height: 96,
-    padding: "0 28px",
+    minHeight: 76,
+    padding: "14px 28px",
     display: "grid",
     gridTemplateColumns: "1fr auto 1fr",
     alignItems: "center",
@@ -663,6 +920,7 @@ const styles = {
     top: 0,
     zIndex: 50,
     backdropFilter: "blur(10px)",
+    gap: 16,
   },
 
   brand: {
@@ -699,16 +957,37 @@ const styles = {
     display: "block",
   },
 
-  headerCenterText: {
-    fontSize: 15,
+  tabWrap: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+
+  tabBtn: {
+    padding: "10px 18px",
+    borderRadius: 14,
+    cursor: "pointer",
     fontWeight: 700,
-    opacity: 0.9,
+    fontSize: 14,
+    transition: "all 0.2s ease",
   },
 
   rightWrap: {
     display: "flex",
     justifyContent: "flex-end",
     alignItems: "center",
+    gap: 10,
+  },
+
+  iconBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    cursor: "pointer",
+    fontSize: 16,
+    border: "none",
   },
 
   profileBtn: {
@@ -722,17 +1001,33 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+    border: "none",
+  },
+
+  popupWrap: {
+    position: "relative",
   },
 
   dropdown: {
     position: "absolute",
     top: 56,
     right: 0,
-    minWidth: 190,
+    minWidth: 210,
     borderRadius: 16,
     boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
     overflow: "hidden",
     zIndex: 100,
+  },
+
+  dropdownHead: {
+    padding: "14px 16px",
+    fontSize: 14,
+    fontWeight: 800,
+  },
+
+  dropdownText: {
+    padding: "12px 16px",
+    fontSize: 14,
   },
 
   dropdownItem: {
@@ -757,48 +1052,6 @@ const styles = {
     borderRadius: 14,
     marginBottom: 20,
     fontWeight: 600,
-  },
-
-  heroCard: {
-    borderRadius: 28,
-    padding: "34px 32px",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-  },
-
-  heroContent: {
-    maxWidth: 760,
-  },
-
-  heroBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    padding: "8px 14px",
-    borderRadius: 999,
-    fontWeight: 700,
-    fontSize: 13,
-    marginBottom: 18,
-  },
-
-  heroTitle: {
-    margin: "0 0 14px 0",
-    fontSize: 38,
-    lineHeight: 1.15,
-    fontWeight: 800,
-    letterSpacing: "-0.6px",
-  },
-
-  heroText: {
-    margin: 0,
-    fontSize: 16,
-    lineHeight: 1.7,
-    maxWidth: 700,
-  },
-
-  heroButtonRow: {
-    display: "flex",
-    gap: 12,
-    marginTop: 24,
-    flexWrap: "wrap",
   },
 
   sectionBlock: {
@@ -861,6 +1114,45 @@ const styles = {
     borderRadius: 26,
     padding: 26,
     boxShadow: "0 14px 34px rgba(15,23,42,0.05)",
+  },
+
+  scoringGrid: {
+    marginTop: 30,
+    display: "grid",
+    gridTemplateColumns: "1fr 1.2fr",
+    gap: 20,
+  },
+
+  panelCard: {
+    borderRadius: 26,
+    padding: 26,
+    boxShadow: "0 14px 34px rgba(15,23,42,0.05)",
+  },
+
+  featureBox: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 16,
+    borderRadius: 18,
+    background: "rgba(47,150,180,0.06)",
+    marginBottom: 20,
+  },
+
+  featureIcon: {
+    fontSize: 26,
+    lineHeight: 1,
+  },
+
+  featureTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    marginBottom: 6,
+  },
+
+  featureText: {
+    fontSize: 14,
+    lineHeight: 1.6,
   },
 
   searchRow: {
@@ -950,12 +1242,9 @@ const styles = {
     fontSize: 14,
   },
 
-  smallOutlineBtn: {
-    padding: "11px 15px",
-    borderRadius: 12,
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 14,
+  evalList: {
+    display: "grid",
+    gap: 14,
   },
 
   modalOverlay: {
