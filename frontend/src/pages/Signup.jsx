@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/logo.png";
 
 export default function Signup() {
   const navigate = useNavigate();
+
+  const dark = localStorage.getItem("theme") === "dark";
+  const theme = dark ? darkTheme : lightTheme;
 
   const [form, setForm] = useState({
     bank_code: "",
@@ -28,6 +32,7 @@ export default function Signup() {
       setErr("Password must be at least 8 characters.");
       return;
     }
+
     if (form.password !== form.confirm) {
       setErr("Passwords do not match.");
       return;
@@ -48,7 +53,7 @@ export default function Signup() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Signup failed.");
 
-      setMsg("Account created ✅ You can login now.");
+      setMsg("Account created. You can login now.");
       setTimeout(() => navigate("/login"), 800);
     } catch (e2) {
       setErr(e2.message);
@@ -58,21 +63,35 @@ export default function Signup() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card} className="signup-card">
-        <h2 style={{ marginTop: 0 }}>Evaluator Signup</h2>
-        <p style={{ opacity: 0.75, marginTop: 6 }}>
-          Enter your bank code to join the correct bank.
-        </p>
+    <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
+      <div
+        style={{
+          ...styles.card,
+          background: theme.card,
+          border: `1px solid ${theme.border}`,
+          boxShadow: theme.shadow,
+        }}
+      >
+       
 
-        <form onSubmit={onSubmit} style={{ display: "grid", gap: 10, marginTop: 14 }}>
+        <h1 style={{ ...styles.title, color: theme.text }}>Evaluator Signup</h1>
+        <h3 style={{ ...styles.title2}}>
+          Enter your bank code to join the correct bank.
+        </h3>
+
+        <form onSubmit={onSubmit} style={styles.form}>
           <input
             name="bank_code"
             value={form.bank_code}
             onChange={onChange}
-            placeholder="Bank code (e.g., HNB001)"
+            placeholder="Bank code"
             required
-            style={styles.input}
+            style={{
+              ...styles.input,
+              background: theme.inputBg,
+              color: theme.text,
+              border: `1px solid ${theme.border}`,
+            }}
           />
 
           <input
@@ -81,7 +100,12 @@ export default function Signup() {
             onChange={onChange}
             placeholder="Username"
             required
-            style={styles.input}
+            style={{
+              ...styles.input,
+              background: theme.inputBg,
+              color: theme.text,
+              border: `1px solid ${theme.border}`,
+            }}
           />
 
           <input
@@ -91,7 +115,12 @@ export default function Signup() {
             onChange={onChange}
             placeholder="Password (min 8 characters)"
             required
-            style={styles.input}
+            style={{
+              ...styles.input,
+              background: theme.inputBg,
+              color: theme.text,
+              border: `1px solid ${theme.border}`,
+            }}
           />
 
           <input
@@ -101,107 +130,169 @@ export default function Signup() {
             onChange={onChange}
             placeholder="Confirm password"
             required
-            style={styles.input}
+            style={{
+              ...styles.input,
+              background: theme.inputBg,
+              color: theme.text,
+              border: `1px solid ${theme.border}`,
+            }}
           />
-          
+
           <button disabled={loading} style={styles.btn}>
             {loading ? "Creating..." : "Create account"}
           </button>
-          <button onClick={() => navigate("/")} style={styles.link}>
-           Back to Home
+
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={{ ...styles.link, color: theme.link }}
+          >
+            Back to Home
           </button>
 
-          {msg && <div style={{ color: "green" }}>{msg}</div>}
-          {err && <div style={{ color: "crimson" }}>{err}</div>}
+          {msg && <div style={{ color: theme.success }}>{msg}</div>}
+          {err && <div style={{ color: theme.error }}>{err}</div>}
         </form>
 
-        <button onClick={() => navigate("/login")} style={styles.link}>
-          Already have an account? Login →
+        <button
+          type="button"
+          onClick={() => navigate("/login")}
+          style={{ ...styles.bottomLink, color: theme.link }}
+        >
+          Already have an account? Login
         </button>
-
-        
       </div>
     </div>
   );
 }
 
+const lightTheme = {
+  bg: "#F4F8FB",
+  card: "#FFFFFF",
+  text: "#0F172A",
+  muted: "#64748B",
+  border: "#E2E8F0",
+  inputBg: "#FFFFFF",
+  link: "#2F96B4",
+  success: "green",
+  error: "crimson",
+  shadow: "0 20px 40px rgba(0,0,0,0.10)",
+};
+
+const darkTheme = {
+  bg: "#071423",
+  card: "rgba(255,255,255,0.06)",
+  text: "#FFFFFF",
+  muted: "rgba(255,255,255,0.7)",
+  border: "rgba(255,255,255,0.14)",
+  inputBg: "transparent",
+  link: "#7DD3FC",
+  success: "#86EFAC",
+  error: "#FCA5A5",
+  shadow: "0 20px 40px rgba(0,0,0,0.20)",
+};
+
 const styles = {
   page: {
     minHeight: "100vh",
-    minWidth: 0,
-    width: "100vw",
+    width: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#0f172a",
     padding: 12,
-    fontFamily: "system-ui",
-    color: "white",
     boxSizing: "border-box",
+    fontFamily: "system-ui",
   },
+
   card: {
     width: "min(520px, 100%)",
-    maxWidth: "100%",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.14)",
     borderRadius: 18,
-    padding: 18,
+    padding: 22,
     boxSizing: "border-box",
-    margin: "0 auto",
   },
+
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 18,
+  },
+
+  logo: {
+    width: 55,
+    height: 55,
+    objectFit: "contain",
+  },
+
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  brandSub: {
+    fontSize: 12,
+  },
+
+  title: {
+    marginBottom: 18,
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  title2:{
+    marginBottom: 18,
+    fontSize: 16,
+    
+  },
+  sub: {
+    marginTop: 0,
+    marginBottom: 14,
+  },
+
+  form: {
+    display: "grid",
+    gap: 10,
+  },
+
   input: {
     padding: 12,
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "transparent",
-    color: "white",
     outline: "none",
     width: "100%",
     boxSizing: "border-box",
   },
+
   btn: {
     marginTop: 4,
     padding: 12,
     borderRadius: 12,
     border: "none",
-    background: "#1f9cc6",
+    background: "#2F96B4",
     color: "white",
     fontWeight: 800,
     cursor: "pointer",
     width: "100%",
     boxSizing: "border-box",
   },
+
   link: {
+    marginTop: 8,
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    textAlign: "left",
+    fontWeight: 700,
+    width: "100%",
+    boxSizing: "border-box",
+  },
+
+  bottomLink: {
     marginTop: 14,
     background: "transparent",
     border: "none",
-    color: "white",
     cursor: "pointer",
     textAlign: "left",
-    opacity: 0.85,
     fontWeight: 700,
     width: "100%",
     boxSizing: "border-box",
   },
 };
-
-// Responsive styles for mobile
-if (typeof window !== "undefined") {
-  const style = document.createElement("style");
-  style.innerHTML = `
-    @media (max-width: 600px) {
-      .signup-card {
-        width: 98vw !important;
-        max-width: 98vw !important;
-        padding: 8px !important;
-        border-radius: 10px !important;
-        margin: 0 !important;
-      }
-      body, html {
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-}

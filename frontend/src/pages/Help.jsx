@@ -22,7 +22,6 @@ export default function Settings() {
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      {/* Top bar */}
       <div
         style={{
           ...styles.topbar,
@@ -39,41 +38,32 @@ export default function Settings() {
             <div style={{ ...styles.brandTitle, color: theme.text }}>
               SME Scoring
             </div>
-            
-          
+            <div style={{ ...styles.brandSub, color: theme.muted }}>
+              Decision Support Platform
+            </div>
           </div>
         </div>
 
-        <button
-          style={{
-            ...styles.ghostBtn,
-            color: theme.text,
-            border: `1px solid ${theme.borderStrong}`,
-          }}
-          onClick={() => navigate("/")}
-        >
-          Back
-        </button>
+        
       </div>
 
-      {/* Content */}
       <main style={styles.main}>
         <div style={styles.container}>
-          {/* Bank Admin */}
           <div
             style={{
               ...styles.card,
               background: theme.card,
               border: `1px solid ${theme.border}`,
+              boxShadow: theme.shadow,
             }}
           >
-            <h2 style={{ margin: 0 }}>Bank Administration</h2>
-            <p style={{ marginTop: 8, color: theme.muted, lineHeight: 1.5 }}>
+            <h2 style={{ ...styles.heading, color: theme.text }}>
+              Bank Administration
+            </h2>
+            <p style={{ ...styles.text, color: theme.muted }}>
               Bank admins can manage evaluators and view bank-level SME scoring
               insights.
             </p>
-
-            
 
             <div style={styles.row}>
               <button
@@ -91,8 +81,9 @@ export default function Settings() {
             <div
               style={{
                 ...styles.note,
-                borderColor: theme.borderStrong,
+                border: `1px solid ${theme.borderStrong}`,
                 color: theme.muted,
+                background: theme.noteBg,
               }}
             >
               Tip: Evaluators should use the normal login page. Bank admins use
@@ -100,16 +91,16 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Support */}
           <div
             style={{
               ...styles.card,
               background: theme.card,
               border: `1px solid ${theme.border}`,
+              boxShadow: theme.shadow,
             }}
           >
-            <h2 style={{ margin: 0 }}>Support</h2>
-            <p style={{ marginTop: 8, color: theme.muted, lineHeight: 1.5 }}>
+            <h2 style={{ ...styles.heading, color: theme.text }}>Support</h2>
+            <p style={{ ...styles.text, color: theme.muted }}>
               If you have issues with access or bank codes, contact the system
               owner.
             </p>
@@ -120,7 +111,6 @@ export default function Settings() {
   );
 }
 
-/* Brand palette */
 const BRAND = "#2F96B4";
 
 const darkTheme = {
@@ -133,6 +123,8 @@ const darkTheme = {
   borderStrong: "rgba(255,255,255,0.18)",
   button: BRAND,
   buttonText: "#FFFFFF",
+  noteBg: "rgba(255,255,255,0.03)",
+  shadow: "0 16px 32px rgba(0,0,0,0.18)",
 };
 
 const lightTheme = {
@@ -145,16 +137,17 @@ const lightTheme = {
   borderStrong: "rgba(15,23,42,0.18)",
   button: BRAND,
   buttonText: "#FFFFFF",
+  noteBg: "#F8FBFE",
+  shadow: "0 16px 32px rgba(15,23,42,0.08)",
 };
 
 const styles = {
-  // ✅ full screen height always
   page: {
     minHeight: "100vh",
     minWidth: 0,
     width: "100vw",
     overflowX: "hidden",
-    fontFamily: "system-ui",
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
     display: "flex",
     flexDirection: "column",
   },
@@ -166,8 +159,8 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "14px 5%",
-    backdropFilter: "blur(10px)",
+    padding: "16px 5%",
+    backdropFilter: "blur(12px)",
     flexWrap: "wrap",
     gap: 12,
   },
@@ -180,54 +173,63 @@ const styles = {
   },
 
   logoImg: {
-    width: 92,
-    height: 62,
+    width: 76,
+    height: 52,
     objectFit: "contain",
   },
 
   brandTitle: {
-    fontWeight: 950,
+    fontWeight: 800,
     fontSize: 20,
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
+    lineHeight: 1.1,
   },
 
   brandSub: {
     fontSize: 12,
-    marginTop: 2,
-    opacity: 0.9,
+    marginTop: 3,
   },
 
-  // ✅ gives nice spacing around the content, responsive
   main: {
     flex: 1,
     display: "flex",
     justifyContent: "center",
-    padding: "24px 16px 44px",
+    padding: "28px 16px 44px",
   },
 
-  // ✅ not too wide on big screens, not too small on mobiles
   container: {
     width: "min(980px, 100%)",
     display: "grid",
     gap: 16,
   },
+
   card: {
     width: "min(980px, 100%)",
     maxWidth: "100%",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 20,
+    padding: 22,
     boxSizing: "border-box",
     margin: "0 auto",
   },
-  
+
+  heading: {
+    margin: 0,
+    fontSize: 24,
+    fontWeight: 800,
+    letterSpacing: -0.3,
+  },
+
+  text: {
+    marginTop: 10,
+    lineHeight: 1.6,
+    fontSize: 15,
+  },
 
   row: {
     display: "flex",
     gap: 10,
     flexWrap: "wrap",
-    marginTop: 14,
+    marginTop: 18,
     alignItems: "center",
   },
 
@@ -235,27 +237,26 @@ const styles = {
     padding: "10px 14px",
     borderRadius: 12,
     cursor: "pointer",
-    background: "transparent",
-    fontWeight: 900,
+    fontWeight: 700,
     whiteSpace: "nowrap",
   },
 
-  // ✅ doesn’t become huge; stays nice size
   primaryBtn: {
     padding: "12px 16px",
     borderRadius: 12,
     cursor: "pointer",
     border: "none",
-    fontWeight: 900,
+    fontWeight: 800,
     width: "fit-content",
     minWidth: 180,
+    fontSize: 14,
   },
 
   note: {
-    marginTop: 14,
-    border: "1px solid",
+    marginTop: 16,
     borderRadius: 12,
-    padding: "10px 12px",
+    padding: "12px 14px",
     fontSize: 13,
+    lineHeight: 1.5,
   },
 };

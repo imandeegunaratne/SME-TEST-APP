@@ -4,7 +4,9 @@ import logo from "../assets/logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [dark] = useState(true);
+
+  // get theme selected in landing page
+  const dark = localStorage.getItem("theme") === "dark";
   const theme = dark ? darkTheme : lightTheme;
 
   const [form, setForm] = useState({ username: "", password: "" });
@@ -24,196 +26,178 @@ export default function Login() {
       const res = await fetch("/api/auth/login/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: form.username,
-          password: form.password,
-        }),
+        body: JSON.stringify(form),
       });
 
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Login failed");
 
-      if (!res.ok) {
-        throw new Error(data.detail || "Login failed.");
-      }
-
-      // ✅ STORE AUTH DATA
       localStorage.setItem("token", data.token);
-      localStorage.setItem("username", data.username);
       localStorage.setItem("role", data.role);
-      localStorage.setItem("bank_name", data.bank_name);
-      localStorage.setItem("bank_code", data.bank_code);
 
-      // ✅ REDIRECT BASED ON ROLE
-      if (data.role === "BANK_ADMIN") {
-        navigate("/bank-admin-dashboard");
-      } else {
-        navigate("/evaluator-home");
-      }
+      if (data.role === "BANK_ADMIN") navigate("/bank-admin-dashboard");
+      else navigate("/evaluator-home");
 
-    } catch (e2) {
-      setErr(e2.message);
+    } catch (e) {
+      setErr(e.message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      <div style={styles.centerWrap}>
-        <div
-          style={{
-            ...styles.card,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-          }}
-          className="login-card"
-        >
-          <h2 style={styles.h2}>Login</h2>
-          <p style={{ ...styles.sub, color: theme.mutedText }}>
-            Evaluators & Bank Admins login here.
-          </p>
+    <div style={{ ...styles.page, background: theme.bg }}>
+      <div style={{ ...styles.card, background: theme.card, border:`1px solid ${theme.border}` }}>
 
-          <form
-            onSubmit={onSubmit}
-            style={{ display: "grid", gap: 10, marginTop: 14 }}
+        {/* Logo + Title */}
+        
+
+        <h1 style={{ ...styles.title, color: theme.text }}>Evaluator Login</h1>
+        <h3 style={{ ...styles.title2, color: theme.text }}>Please sign in if you have an account</h3>
+
+        <form onSubmit={onSubmit} style={styles.form}>
+          <input
+            name="username"
+            placeholder="Username"
+            value={form.username}
+            onChange={onChange}
+            style={{ ...styles.input, background: theme.bg, color: theme.text }}
+            required
+          />
+
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={form.password}
+            onChange={onChange}
+            style={{ ...styles.input, background: theme.bg, color: theme.text }}
+            required
+          />
+
+          <button disabled={loading} style={styles.button}>
+            {loading ? "Signing in..." : "Login"}
+          </button>
+
+          {err && <div style={styles.error}>{err}</div>}
+
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={styles.link}
           >
-            <label style={styles.label}>Username</label>
-            <input
-              name="username"
-              value={form.username}
-              onChange={onChange}
-              placeholder="Your username"
-              style={{
-                ...styles.input,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                background: theme.bg,
-              }}
-              required
-            />
+            Back to Home
+          </button>
 
-            <label style={styles.label}>Password</label>
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={onChange}
-              placeholder="Your password"
-              style={{
-                ...styles.input,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                background: theme.bg,
-              }}
-              required
-            />
 
-            <button
-              disabled={loading}
-              style={{ ...styles.primaryBtn, background: theme.primary }}
-            >
-              {loading ? "Signing in..." : "Login"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              style={styles.link}
-            >
-              Back to Home
-            </button>
-
-            {err && (
-              <div style={{ color: "#ef4444", marginTop: 6 }}>{err}</div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => navigate("/signup")}
-              style={{ ...styles.linkBtn, color: theme.text }}
-            >
-              New evaluator? Create an account →
-            </button>
-          </form>
-        </div>
+          <button
+                  type="button"
+                  onClick={() => navigate("/signup")}
+                  style={styles.link}>
+                  New evaluator? Create an account
+                </button>
+          
+        </form>
       </div>
     </div>
   );
 }
 
 const lightTheme = {
-  bg: "#f7fbff",
-  text: "#0b1220",
-  card: "#ffffff",
-  border: "rgba(11, 18, 32, 0.12)",
-  primary: "#1f9cc6",
-  mutedText: "rgba(11, 18, 32, 0.70)",
+  bg: "#F4F8FB",
+  card: "#FFFFFF",
+  text: "#0F172A",
+  muted: "#64748B",
+  border: "#E2E8F0",
 };
 
 const darkTheme = {
   bg: "#071423",
-  text: "#ffffff",
   card: "rgba(255,255,255,0.06)",
+  text: "#FFFFFF",
+  muted: "rgba(255,255,255,0.7)",
   border: "rgba(255,255,255,0.14)",
-  primary: "#1f9cc6",
-  mutedText: "rgba(255,255,255,0.72)",
 };
 
 const styles = {
   page: {
     minHeight: "100vh",
-    width: "100vw",
-    display: "flex",
-    flexDirection: "column",
-    boxSizing: "border-box",
-  },
-  centerWrap: {
-    flex: 1,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "24px 5%",
   },
+
   card: {
-    width: "min(480px, 100%)",
-    borderRadius: 18,
-    padding: "32px 24px",
-    boxShadow: "0 18px 45px rgba(0,0,0,0.15)",
+    width: 380,
+    padding: 30,
+    borderRadius: 16,
+    boxShadow: "0 20px 40px rgba(0,0,0,0.12)",
   },
-  h2: { margin: 0, fontSize: 26 },
-  sub: { marginTop: 6, marginBottom: 0 },
-  label: { fontSize: 13, fontWeight: 800, marginTop: 6 },
+
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+
+  logo: {
+    width: 55,
+  },
+
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  brandSub: {
+    fontSize: 12,
+  },
+
+  title: {
+    marginBottom: 18,
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+
+  title2:{
+    marginBottom: 18,
+    fontSize: 16,
+    
+  },
+
+
+  form: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
   input: {
     padding: 12,
-    borderRadius: 12,
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
+    borderRadius: 10,
+    border: "1px solid #E2E8F0",
   },
-  primaryBtn: {
-    marginTop: 10,
+
+  button: {
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     border: "none",
+    background: "#2F96B4",
     color: "white",
-    fontWeight: 900,
+    fontWeight: "bold",
     cursor: "pointer",
   },
-  linkBtn: {
-    marginTop: 12,
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    textAlign: "center",
-    fontWeight: 700,
-    opacity: 0.8,
-  },
+
   link: {
-    marginTop: 10,
-    background: "transparent",
     border: "none",
+    background: "transparent",
     cursor: "pointer",
-    fontWeight: 700,
-    opacity: 0.85,
+    color: "#2F96B4",
+  },
+
+  error: {
+    color: "red",
+    fontSize: 14,
   },
 };

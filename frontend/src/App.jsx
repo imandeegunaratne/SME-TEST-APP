@@ -7,6 +7,7 @@ import EvaluatorHome from "./pages/EvaluatorHome";
 import SmeRegister from "./pages/SMERegister";
 import SMEReport from "./pages/SMEReport";
 import SMEScore from "./pages/Scoring";
+import BankAdminLogin from "./pages/BankAdminLogin";
 import BankAdminDashboard from "./pages/BankAdminDashbord";
 import Results from "./pages/Results";
 import EvaluatorProfile from "./pages/EvaluatorProfile";
@@ -83,6 +84,9 @@ function App() {
         </ProtectedRoute>
       }
 />
+      <Route 
+      path="/admin-login" 
+      element={<BankAdminLogin allowRoles={["BANK_ADMIN"]} />} />
       </Routes>
     </BrowserRouter>
   );

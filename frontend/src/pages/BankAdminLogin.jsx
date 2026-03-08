@@ -5,7 +5,8 @@ import logo from "../assets/logo.png";
 
 export default function BankAdminLogin() {
   const navigate = useNavigate();
-  const [dark] = useState(true); // change if you want theme toggle
+
+  const dark = localStorage.getItem("theme") === "dark";
   const theme = dark ? darkTheme : lightTheme;
 
   const [form, setForm] = useState({ username: "", password: "" });
@@ -34,34 +35,26 @@ export default function BankAdminLogin() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // server returned an error message
         throw new Error(data.detail || "Login failed. Check credentials.");
       }
 
-      // Save auth details to localStorage
-      // (store only what backend returns — don't store sensitive extras)
       localStorage.setItem("token", data.token || "");
       localStorage.setItem("username", data.username || "");
       localStorage.setItem("role", data.role || "");
       if (data.bank_name) localStorage.setItem("bank_name", data.bank_name);
       if (data.bank_code) localStorage.setItem("bank_code", data.bank_code);
 
-      // Role guard — only bank admins should use this login page
       if (data.role !== "BANK_ADMIN") {
-        // keep consistent state: clear token and other values we just set
         localStorage.removeItem("token");
         localStorage.removeItem("username");
         localStorage.removeItem("role");
         localStorage.removeItem("bank_name");
         localStorage.removeItem("bank_code");
-
         throw new Error("This account is not a bank admin.");
       }
 
-      // Redirect to admin dashboard
       navigate("/bank-admin-dashboard");
     } catch (err2) {
-      // show a user-friendly message
       setErr(err2.message || "Unable to login. Please try again.");
     } finally {
       setLoading(false);
@@ -72,18 +65,22 @@ export default function BankAdminLogin() {
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
       <div style={styles.centerWrap}>
         <div
-          style={{ ...styles.card, background: theme.card, border: `1px solid ${theme.border}` }}
-          className="login-card"
+          style={{
+            ...styles.card,
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            boxShadow: theme.shadow,
+          }}
         >
-          <img src={logo} alt="logo" style={{ width: 64, height: 46, marginBottom: 12 }} />
+          
 
-          <h2 style={styles.h2}>Bank Admin Login</h2>
+          <h2 style={{ ...styles.h2, color: theme.text }}>Bank Admin Login</h2>
           <p style={{ ...styles.sub, color: theme.mutedText }}>
             Sign in with your bank admin account.
           </p>
 
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: 10, marginTop: 14 }}>
-            <label style={styles.label} htmlFor="username">
+          <form onSubmit={onSubmit} style={styles.form}>
+            <label style={{ ...styles.label, color: theme.text }} htmlFor="username">
               Username
             </label>
             <input
@@ -92,12 +89,17 @@ export default function BankAdminLogin() {
               value={form.username}
               onChange={onChange}
               placeholder="Admin username"
-              style={{ ...styles.input, border: `1px solid ${theme.border}`, color: theme.text, background: theme.bg }}
+              style={{
+                ...styles.input,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+                background: theme.inputBg,
+              }}
               required
               autoComplete="username"
             />
 
-            <label style={styles.label} htmlFor="password">
+            <label style={{ ...styles.label, color: theme.text }} htmlFor="password">
               Password
             </label>
             <input
@@ -107,7 +109,12 @@ export default function BankAdminLogin() {
               value={form.password}
               onChange={onChange}
               placeholder="Password"
-              style={{ ...styles.input, border: `1px solid ${theme.border}`, color: theme.text, background: theme.bg }}
+              style={{
+                ...styles.input,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+                background: theme.inputBg,
+              }}
               required
               autoComplete="current-password"
             />
@@ -121,11 +128,26 @@ export default function BankAdminLogin() {
               {loading ? "Signing in..." : "Login"}
             </button>
 
-            <button type="button" onClick={() => navigate("/")} style={styles.link}>
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              style={{ ...styles.link, color: theme.link }}
+            >
               Back to Home
             </button>
 
-            {err && <div style={{ color: "#ef4444", marginTop: 6 }}>{err}</div>}
+            {err && (
+              <div
+                style={{
+                  ...styles.errorBox,
+                  background: theme.errorBg,
+                  border: `1px solid ${theme.errorBorder}`,
+                  color: theme.errorText,
+                }}
+              >
+                {err}
+              </div>
+            )}
           </form>
         </div>
       </div>
@@ -133,24 +155,34 @@ export default function BankAdminLogin() {
   );
 }
 
-/* ================= THEME & STYLES ================= */
-
 const lightTheme = {
-  bg: "#f7fbff",
-  text: "#0b1220",
-  card: "#ffffff",
-  border: "rgba(11, 18, 32, 0.12)",
-  primary: "#1f9cc6",
-  mutedText: "rgba(11, 18, 32, 0.70)",
+  bg: "#F4F8FB",
+  text: "#0F172A",
+  card: "#FFFFFF",
+  border: "#E2E8F0",
+  primary: "#2F96B4",
+  mutedText: "rgba(15,23,42,0.68)",
+  inputBg: "#FFFFFF",
+  link: "#2F96B4",
+  shadow: "0 16px 32px rgba(15,23,42,0.08)",
+  errorBg: "rgba(239,68,68,0.08)",
+  errorBorder: "rgba(239,68,68,0.20)",
+  errorText: "#B91C1C",
 };
 
 const darkTheme = {
-  bg: "#071423",
-  text: "#ffffff",
-  card: "rgba(255,255,255,0.06)",
-  border: "rgba(255,255,255,0.14)",
-  primary: "#1f9cc6",
-  mutedText: "rgba(255,255,255,0.72)",
+  bg: "#0B1220",
+  text: "#FFFFFF",
+  card: "#172033",
+  border: "rgba(255,255,255,0.10)",
+  primary: "#2F96B4",
+  mutedText: "rgba(255,255,255,0.78)",
+  inputBg: "rgba(255,255,255,0.03)",
+  link: "#7DD3FC",
+  shadow: "0 16px 32px rgba(0,0,0,0.18)",
+  errorBg: "rgba(239,68,68,0.10)",
+  errorBorder: "rgba(239,68,68,0.24)",
+  errorText: "#FCA5A5",
 };
 
 const styles = {
@@ -160,7 +192,9 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     boxSizing: "border-box",
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   },
+
   centerWrap: {
     flex: 1,
     display: "flex",
@@ -168,32 +202,99 @@ const styles = {
     justifyContent: "center",
     padding: "24px 5%",
   },
+
   card: {
-    width: "min(480px, 100%)",
-    borderRadius: 18,
-    padding: "32px 24px",
-    boxShadow: "0 18px 45px rgba(0,0,0,0.15)",
+    width: "min(460px, 100%)",
+    borderRadius: 20,
+    padding: "28px 24px",
   },
-  h2: { margin: 0, fontSize: 26 },
-  sub: { marginTop: 6, marginBottom: 0 },
-  label: { fontSize: 13, fontWeight: 800, marginTop: 6 },
-  input: { padding: 12, borderRadius: 12, outline: "none", width: "100%", boxSizing: "border-box" },
+
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 22,
+  },
+
+  logo: {
+    width: 55,
+    height: 55,
+    objectFit: "contain",
+  },
+
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: 800,
+    letterSpacing: -0.3,
+    lineHeight: 1.1,
+  },
+
+  brandSub: {
+    fontSize: 12,
+    marginTop: 3,
+  },
+
+  h2: {
+    margin: 0,
+    fontSize: 26,
+    fontWeight: 800,
+    letterSpacing: -0.3,
+  },
+
+  sub: {
+    marginTop: 8,
+    marginBottom: 0,
+    fontSize: 14,
+    lineHeight: 1.6,
+  },
+
+  form: {
+    display: "grid",
+    gap: 10,
+    marginTop: 16,
+  },
+
+  label: {
+    fontSize: 13,
+    fontWeight: 800,
+    marginTop: 6,
+  },
+
+  input: {
+    padding: 12,
+    borderRadius: 12,
+    outline: "none",
+    width: "100%",
+    boxSizing: "border-box",
+    fontSize: 14,
+  },
+
   primaryBtn: {
-    marginTop: 10,
+    marginTop: 12,
     padding: 12,
     borderRadius: 12,
     border: "none",
     color: "white",
-    fontWeight: 900,
+    fontWeight: 800,
+    fontSize: 14,
     cursor: "pointer",
   },
+
   link: {
     marginTop: 10,
     background: "transparent",
     border: "none",
     cursor: "pointer",
     fontWeight: 700,
-    opacity: 0.85,
     textAlign: "left",
+    padding: 0,
+  },
+
+  errorBox: {
+    marginTop: 8,
+    padding: "12px 14px",
+    borderRadius: 12,
+    fontSize: 14,
+    lineHeight: 1.5,
   },
 };
