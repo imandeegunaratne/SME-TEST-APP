@@ -53,11 +53,7 @@ export default function EvaluatorHome() {
   const [allSMEs, setAllSMEs] = useState([]);
   const [comparisonList, setComparisonList] = useState([]);
 
-  const notifications = [
-    "2 SMEs pending scoring",
-    "1 incomplete scoring available",
-    "New SME ready for evaluation",
-  ];
+  const notifications = [];
 
   function authHeaders(extra = {}) {
     const tokenNow = localStorage.getItem("token");
@@ -149,7 +145,7 @@ export default function EvaluatorHome() {
 
     try {
       const res = await fetch(
-        `/api/smes/by-br/?br=${encodeURIComponent(homeSearch.trim())}`,
+        `/api/smes/report-by-br/?br=${encodeURIComponent(homeSearch.trim())}`,
         { headers: authHeaders() }
       );
 
@@ -160,9 +156,17 @@ export default function EvaluatorHome() {
       }
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "SME not found.");
+
+      if (!res.ok) {
+        setHomeSearchMsg(
+          data.detail ||
+            "Scoring has not been done. Please go to the Scoring part and start scoring."
+        );
+        return;
+      }
 
       setHomeFound(data);
+      setHomeSearchMsg("Completed SME report found.");
     } catch (e) {
       setHomeSearchMsg(e.message || "Search failed.");
     }
@@ -186,7 +190,7 @@ export default function EvaluatorHome() {
 
     try {
       const res = await fetch(
-        `/api/smes/by-br/?br=${encodeURIComponent(scoreSearch.trim())}`,
+        `/api/smes/scoring-by-br/?br=${encodeURIComponent(scoreSearch.trim())}`,
         { headers: authHeaders() }
       );
 
@@ -197,9 +201,14 @@ export default function EvaluatorHome() {
       }
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "SME not found.");
+
+      if (!res.ok) {
+        setScoreSearchMsg(data.detail || "Search failed.");
+        return;
+      }
 
       setScoreFound(data);
+      setScoreSearchMsg("SME found. You can continue scoring.");
     } catch (e) {
       setScoreSearchMsg(e.message || "Search failed.");
     }
@@ -323,7 +332,7 @@ export default function EvaluatorHome() {
         </div>
 
         <div style={styles.tabWrap}>
-          {["home", "scoring", "evaluation"].map((tab) => (
+          {["home", "scoring"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -695,65 +704,7 @@ export default function EvaluatorHome() {
           </div>
         )}
 
-        {activeTab === "evaluation" && (
-          <section
-            style={{
-              ...styles.searchCard,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
-            <div style={styles.sectionHeader}>
-              <h2 style={styles.sectionTitle}>SME Comparison</h2>
-              <p style={{ ...styles.sectionSub, color: theme.subText }}>
-                Select two or more SMEs for comparison
-              </p>
-            </div>
-
-            <div style={styles.evalList}>
-              {allSMEs.map((sme) => {
-                const selected = comparisonList.some((x) => x.id === sme.id);
-                return (
-                  <div
-                    key={sme.id}
-                    style={{
-                      ...styles.resultCard,
-                      marginTop: 0,
-                      background: theme.resultBg,
-                      border: `1px solid ${selected ? theme.button : theme.border}`,
-                    }}
-                  >
-                    <div style={styles.resultLeft}>
-                      <div style={styles.resultTitle}>{sme.name}</div>
-                      <div style={{ ...styles.resultSub, color: theme.subText }}>
-                        BR Number: {sme.br_number}
-                      </div>
-                    </div>
-
-                    <button
-                      style={{
-                        ...styles.smallPrimaryBtn,
-                        background: selected ? "#16a34a" : theme.button,
-                      }}
-                      onClick={() => toggleCompare(sme)}
-                    >
-                      {selected ? "Selected" : "Add to Compare"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ marginTop: 18 }}>
-              <button
-                style={{ ...styles.primaryBtn, background: theme.button }}
-                onClick={openComparison}
-              >
-                Compare Selected SMEs
-              </button>
-            </div>
-          </section>
-        )}
+       
       </main>
 
       {showPasswordModal && (

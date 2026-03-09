@@ -1,5 +1,5 @@
 # backend/core/views.py
-
+from django.contrib.auth.password_validation import validate_password
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth import authenticate
@@ -68,19 +68,33 @@ def _get_evaluator_profile_or_403(request):
 
 def _get_sme_or_404(pk, bank):
     try:
-        return SME.objects.get(pk=pk, bank=bank)
+        return SME.objects.select_related("evaluator", "scored_by", "bank").get(pk=pk, bank=bank)
     except SME.DoesNotExist:
         return None
 
 
 def _block_if_scored_by_other(sme, evaluator_user):
     """
-    Same rule you already had:
-    - If SME is scored by another evaluator => block editing/submitting
+    If SME is already finally scored by another evaluator => block editing/submitting
     """
     if sme.is_scored and sme.scored_by and sme.scored_by != evaluator_user:
         return Response(
             {"detail": "This SME was already scored by another evaluator."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
+def _block_if_assigned_to_other_evaluator(sme, evaluator_user):
+    """
+    For incomplete evaluations:
+    - if SME is already assigned to another evaluator, block access
+    """
+    if not sme.is_scored and sme.evaluator and sme.evaluator != evaluator_user:
+        return Response(
+            {
+                "detail": f"Access denied. {sme.evaluator.username} should complete the evaluation."
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
     return None
@@ -114,9 +128,9 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
             gap = None
         else:
             s = Decimal(str(score))
-            normalized = (s / Decimal("10"))
-            weighted = (w * normalized)
-            gap = (w * (Decimal("1") - normalized))
+            normalized = s / Decimal("10")
+            weighted = w * normalized
+            gap = w * (Decimal("1") - normalized)
             total += weighted
 
         rows.append(
@@ -132,15 +146,26 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
 
     capability = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    # weakness explorer: rank by GAP desc
-    weaknesses = [
-        r for r in rows if r.get("gap") is not None and r["gap"] > 0
-    ]
+    weaknesses = [r for r in rows if r.get("gap") is not None and r["gap"] > 0]
     weaknesses.sort(key=lambda x: x["gap"], reverse=True)
     for i, w in enumerate(weaknesses, start=1):
         w["rank"] = i
 
     return float(capability), rows, weaknesses
+
+
+def _serialize_sme_basic(sme):
+    return {
+        "id": sme.id,
+        "name": sme.name,
+        "br_number": sme.br_number,
+        "industry": sme.industry,
+        "is_scored": sme.is_scored,
+        "total_score": sme.total_score,
+        "evaluator": sme.evaluator.id if sme.evaluator else None,
+        "evaluator_username": sme.evaluator.username if sme.evaluator else None,
+        "scored_by": sme.scored_by.username if sme.scored_by else None,
+    }
 
 
 # ==========================
@@ -178,14 +203,12 @@ class LoginView(APIView):
 
         p = user.profile
 
-        # Block evaluator until approved/active
         if p.role == "EVALUATOR":
             if not p.is_approved:
                 return Response({"detail": "Pending bank admin approval."}, status=status.HTTP_403_FORBIDDEN)
             if not p.is_active:
                 return Response({"detail": "Account disabled. Contact bank admin."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Bank admin must be active too
         if p.role == "BANK_ADMIN" and not p.is_active:
             return Response({"detail": "Account disabled."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -198,6 +221,7 @@ class LoginView(APIView):
                 "bank_code": p.bank.code if p.bank else None,
                 "bank_name": p.bank.name if p.bank else None,
                 "username": user.username,
+                "user_id": user.id,
             },
             status=status.HTTP_200_OK,
         )
@@ -261,13 +285,17 @@ class ApproveEvaluatorView(APIView):
 
 
 # ==========================
-# SME APIs (existing)
+# SME APIs
 # ==========================
-class SMEByBRView(APIView):
+class SMEReportByBRView(APIView):
+    """
+    GET /api/smes/report-by-br/?br=BR001
+    Only allows viewing completed reports.
+    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request):
-        br = request.GET.get("br")
+        br = (request.GET.get("br") or "").strip()
 
         profile, err = _get_evaluator_profile_or_403(request)
         if err:
@@ -276,26 +304,73 @@ class SMEByBRView(APIView):
         if not br:
             return Response({"detail": "BR number required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        evaluator_user = profile.user
+        try:
+            sme = SME.objects.select_related("evaluator", "scored_by").get(
+                br_number=br,
+                bank=profile.bank,
+            )
+        except SME.DoesNotExist:
+            return Response(
+                {
+                    "detail": "SME not found. Please go to the Scoring part and register and start scoring."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not sme.is_scored:
+            return Response(
+                {
+                    "detail": "Scoring has not been done. Please go to the Scoring part and start scoring."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(_serialize_sme_basic(sme), status=status.HTTP_200_OK)
+
+
+class SMEScoringByBRView(APIView):
+    """
+    GET /api/smes/scoring-by-br/?br=BR001
+    Only allows incomplete evaluations for:
+    - same assigned evaluator, or
+    - no assigned evaluator yet
+    """
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
+    def get(self, request):
+        br = (request.GET.get("br") or "").strip()
+
+        profile, err = _get_evaluator_profile_or_403(request)
+        if err:
+            return err
+
+        if not br:
+            return Response({"detail": "BR number required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            sme = SME.objects.get(br_number=br, bank=profile.bank)
+            sme = SME.objects.select_related("evaluator", "scored_by").get(
+                br_number=br,
+                bank=profile.bank,
+            )
         except SME.DoesNotExist:
-            return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    "detail": "SME not found. Please go to the Scoring part and register and start scoring."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        is_editable = bool(sme.is_scored and sme.scored_by == evaluator_user)
+        if sme.is_scored:
+            return Response(
+                {"detail": "This evaluation has already been completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        data = {
-            "id": sme.id,
-            "name": sme.name,
-            "br_number": sme.br_number,
-            "industry": sme.industry,
-            "is_scored": sme.is_scored,
-            "total_score": sme.total_score,
-            "scored_by": sme.scored_by.username if sme.scored_by else None,
-            "is_editable": is_editable,
-        }
-        return Response(data, status=status.HTTP_200_OK)
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
+
+        return Response(_serialize_sme_basic(sme), status=status.HTTP_200_OK)
 
 
 class EvaluatorSMEsView(APIView):
@@ -410,6 +485,10 @@ class SMEScoreUpdateView(APIView):
         if block:
             return block
 
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
+
         try:
             score = float(request.data.get("total_score"))
         except (TypeError, ValueError):
@@ -418,10 +497,13 @@ class SMEScoreUpdateView(APIView):
         if score < 0:
             return Response({"detail": "total_score must be >= 0."}, status=status.HTTP_400_BAD_REQUEST)
 
+        if sme.evaluator is None:
+            sme.evaluator = profile.user
+
         sme.total_score = score
         sme.is_scored = True
         sme.scored_by = profile.user
-        sme.save(update_fields=["total_score", "is_scored", "scored_by"])
+        sme.save(update_fields=["evaluator", "total_score", "is_scored", "scored_by"])
 
         return Response(
             {
@@ -436,12 +518,12 @@ class SMEScoreUpdateView(APIView):
 
 
 # ============================================================
-# NEW: Weights API (weights stored in DB)
+# Weights API
 # ============================================================
 class CriterionWeightsView(APIView):
     """
     GET /api/criteria/weights/
-    Returns weights from DB (for transparency/debug)
+    Returns weights from DB
     """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
@@ -456,7 +538,7 @@ class CriterionWeightsView(APIView):
 
 
 # ============================================================
-# NEW: Save / Load per-criterion scores for an SME
+# Save / Load per-criterion scores for an SME
 # ============================================================
 class SMECriterionScoresView(APIView):
     """
@@ -475,7 +557,10 @@ class SMECriterionScoresView(APIView):
         if not sme:
             return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # allow viewing even if scored by other evaluator, but not editing (POST blocked below)
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
+
         items = SMECriterionScore.objects.filter(
             sme=sme, evaluator=profile.user
         ).order_by("criterion_code")
@@ -513,6 +598,14 @@ class SMECriterionScoresView(APIView):
         if block:
             return block
 
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
+
+        if sme.evaluator is None:
+            sme.evaluator = profile.user
+            sme.save(update_fields=["evaluator"])
+
         payload = request.data.get("scores")
         if not isinstance(payload, list):
             return Response(
@@ -520,7 +613,6 @@ class SMECriterionScoresView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Valid codes from DB weights (or you can hardcode C1..C10)
         valid_codes = set(
             CriterionWeight.objects.filter(is_active=True).values_list("code", flat=True)
         )
@@ -568,7 +660,7 @@ class SMECriterionScoresView(APIView):
 
 
 # ============================================================
-# NEW: Submit final capability score using DB weights (Excel logic)
+# Submit final capability score using DB weights
 # ============================================================
 class SMESubmitCapabilityView(APIView):
     """
@@ -577,7 +669,6 @@ class SMESubmitCapabilityView(APIView):
     - reads CriterionWeight rows
     - computes Excel logic
     - updates SME.total_score, SME.is_scored, SME.scored_by
-    - returns result JSON for capability page
     """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
@@ -594,6 +685,14 @@ class SMESubmitCapabilityView(APIView):
         if block:
             return block
 
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
+
+        if sme.evaluator is None:
+            sme.evaluator = profile.user
+            sme.save(update_fields=["evaluator"])
+
         weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
         if not weights.exists():
             return Response(
@@ -603,7 +702,6 @@ class SMESubmitCapabilityView(APIView):
 
         weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
 
-        # load scores from DB
         score_rows = SMECriterionScore.objects.filter(
             sme=sme, evaluator=profile.user
         )
@@ -616,8 +714,10 @@ class SMESubmitCapabilityView(APIView):
                 "followup": s.followup,
             }
 
-        # require all criteria to be scored
-        missing = [c for c in weights_by_code.keys() if scores_by_code.get(c, {}).get("score") is None]
+        missing = [
+            c for c in weights_by_code.keys()
+            if scores_by_code.get(c, {}).get("score") is None
+        ]
         if missing:
             return Response(
                 {"detail": "All criteria must be scored before submit.", "missing": missing},
@@ -629,13 +729,14 @@ class SMESubmitCapabilityView(APIView):
         sme.total_score = capability
         sme.is_scored = True
         sme.scored_by = profile.user
-        sme.save(update_fields=["total_score", "is_scored", "scored_by"])
+        sme.evaluator = profile.user
+        sme.save(update_fields=["total_score", "is_scored", "scored_by", "evaluator"])
 
         return Response(
             {
                 "message": "Submitted.",
                 "sme_id": sme.id,
-                "capability_score": capability,  # 0..1 (Excel style)
+                "capability_score": capability,
                 "capability_percent": round(capability * 100, 0),
                 "rows": rows,
                 "weaknesses": weaknesses,
@@ -645,13 +746,12 @@ class SMESubmitCapabilityView(APIView):
 
 
 # ============================================================
-# NEW: Get capability result (for /smes/:id/capability page)
+# Get capability result
 # ============================================================
 class SMECapabilityResultView(APIView):
     """
     GET /api/smes/<id>/capability-result/
     - recompute live from DB (scores + weights)
-    - returns capability + weakness explorer
     """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
@@ -663,6 +763,10 @@ class SMECapabilityResultView(APIView):
         sme = _get_sme_or_404(pk, profile.bank)
         if not sme:
             return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
 
         weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
         if not weights.exists():
@@ -698,5 +802,47 @@ class SMECapabilityResultView(APIView):
                 "rows": rows,
                 "weaknesses": weaknesses,
             },
+            status=status.HTTP_200_OK,
+        )
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        old_password = request.data.get("old_password")
+        new_password = request.data.get("new_password")
+
+        if not old_password or not new_password:
+            return Response(
+                {"detail": "Old password and new password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.check_password(old_password):
+            return Response(
+                {"detail": "Old password is incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            validate_password(new_password, user=user)
+        except Exception as e:
+            errors = []
+            if hasattr(e, "messages"):
+                errors = e.messages
+            else:
+                errors = [str(e)]
+
+            return Response(
+                {"detail": " ".join(errors)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response(
+            {"detail": "Password changed successfully."},
             status=status.HTTP_200_OK,
         )

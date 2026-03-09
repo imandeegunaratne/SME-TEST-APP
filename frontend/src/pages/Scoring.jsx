@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 /* =========================
-   Bands + Rubric (per-criteria)
+   Bands + Rubric
 ========================= */
 const bands = [
   { key: "1–2", label: "1–2 Very weak", min: 1, max: 2 },
@@ -14,7 +14,6 @@ const bands = [
   { key: "9–10", label: "9–10 Very strong", min: 9, max: 10 },
 ];
 
-// ✅ Make sure EACH item has a code (C1..C10)
 const rubric = [
   {
     code: "C1",
@@ -147,39 +146,54 @@ function scoreForBand(b) {
   return Math.round((b.min + b.max) / 2);
 }
 
-/* =========================
-   Theme (match Landing UI)
-========================= */
 const BRAND = "#2F96B4";
 
 const darkTheme = {
   bg: "#0B1220",
-  navBg: "rgba(11,18,32,0.75)",
-  text: "#FFFFFF",
-  muted: "rgba(255,255,255,0.78)",
+  navBg: "rgba(16,24,38,0.92)",
   card: "#172033",
-  border: "rgba(255,255,255,0.10)",
-  borderStrong: "rgba(255,255,255,0.18)",
+  resultBg: "#111827",
+  inputBg: "#0f172a",
+  text: "#ffffff",
+  subText: "rgba(255,255,255,0.72)",
   button: BRAND,
   buttonText: "#FFFFFF",
-  iconBg: "rgba(47,150,180,0.12)",
+  border: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.18)",
+  iconBg1: "rgba(59,130,246,0.16)",
+  iconBg2: "rgba(16,185,129,0.16)",
+  iconBg3: "rgba(245,158,11,0.16)",
+  errorBg: "rgba(220,38,38,0.10)",
+  errorText: "#fecaca",
+  errorBorder: "rgba(220,38,38,0.30)",
+  tabActiveBg: "rgba(47,150,180,0.12)",
+  tabActiveBorder: "rgba(47,150,180,0.24)",
   heroGlow:
-    "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.25), transparent 65%)",
+    "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.18), transparent 65%)",
 };
 
 const lightTheme = {
-  bg: "#F4F8FB",
-  navBg: "rgba(244,248,251,0.75)",
+  bg: "#F4F7FB",
+  navBg: "rgba(255,255,255,0.92)",
+  card: "#ffffff",
+  resultBg: "#F8FAFC",
+  inputBg: "#ffffff",
   text: "#0F172A",
-  muted: "rgba(15,23,42,0.70)",
-  card: "#FFFFFF",
-  border: "#E2E8F0",
-  borderStrong: "rgba(15,23,42,0.18)",
+  subText: "#475569",
   button: BRAND,
   buttonText: "#FFFFFF",
-  iconBg: "rgba(47,150,180,0.10)",
+  border: "rgba(15,23,42,0.10)",
+  borderStrong: "rgba(15,23,42,0.18)",
+  iconBg1: "rgba(59,130,246,0.12)",
+  iconBg2: "rgba(16,185,129,0.12)",
+  iconBg3: "rgba(245,158,11,0.14)",
+  errorBg: "#FEF2F2",
+  errorText: "#B91C1C",
+  errorBorder: "#FECACA",
+  tabActiveBg: "rgba(47,150,180,0.08)",
+  tabActiveBorder: "rgba(47,150,180,0.18)",
   heroGlow:
-    "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.20), transparent 65%)",
+    "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.14), transparent 65%)",
 };
 
 export default function RubricScoringPage() {
@@ -188,7 +202,6 @@ export default function RubricScoringPage() {
 
   const token = localStorage.getItem("token") || "";
 
-  // Persist theme
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved ? saved === "dark" : true;
@@ -207,10 +220,8 @@ export default function RubricScoringPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ✅ one criterion at a time
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // scores state
   const [scores, setScores] = useState(() =>
     Object.fromEntries(
       rubric.map((r) => [r.code, { score: null, notes: "", followup: false }])
@@ -244,15 +255,11 @@ export default function RubricScoringPage() {
   const goToIndex = (idx) => {
     const safe = Math.max(0, Math.min(rubric.length - 1, idx));
     setActiveIndex(safe);
-    // small UX: scroll to top of card area
     setTimeout(() => {
       cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };
 
-  // =========================
-  // Load SME + load saved criterion scores from backend
-  // =========================
   useEffect(() => {
     if (!token) {
       navigate("/login", { replace: true });
@@ -264,7 +271,6 @@ export default function RubricScoringPage() {
       setError("");
 
       try {
-        // 1) SME report data (you already have this endpoint)
         const smeRes = await fetch(`/api/smes/${id}/report/`, {
           headers: { Authorization: `Token ${token}` },
         });
@@ -278,7 +284,6 @@ export default function RubricScoringPage() {
         if (!smeRes.ok) throw new Error(smeData.detail || "Failed to load SME.");
         setSme(smeData);
 
-        // 2) load saved criterion scores (NEW endpoint)
         const csRes = await fetch(`/api/smes/${id}/criterion-scores/`, {
           headers: { Authorization: `Token ${token}` },
         });
@@ -311,9 +316,6 @@ export default function RubricScoringPage() {
     loadAll();
   }, [id, token, navigate]);
 
-  // =========================
-  // Save draft to backend
-  // =========================
   async function saveDraftToBackend() {
     if (!token) return;
 
@@ -351,366 +353,285 @@ export default function RubricScoringPage() {
       setSavingDraft(false);
     }
   }
-
-  // =========================
-  // Submit final -> backend computes Excel logic -> go capability page
-  // =========================
   async function submitFinal() {
-    if (progress.scored !== progress.total) {
-      setError("Please score all criteria before submitting.");
+  if (progress.scored !== progress.total) {
+    setError("Please score all criteria before submitting.");
+    return;
+  }
+
+  setSubmitting(true);
+  setError("");
+
+  try {
+    await saveDraftToBackend();
+
+    const res = await fetch(`/api/smes/${id}/submit-capability/`, {
+      method: "POST",
+      headers: { Authorization: `Token ${token}` },
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      navigate("/login", { replace: true });
       return;
     }
 
-    setSubmitting(true);
-    setError("");
+    if (!res.ok) throw new Error(data.detail || "Submit failed.");
 
-    try {
-      // (1) ensure draft saved
-      await saveDraftToBackend();
-
-      // (2) submit capability
-      const res = await fetch(`/api/smes/${id}/submit-capability/`, {
-        method: "POST",
-        headers: { Authorization: `Token ${token}` },
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (res.status === 401) {
-        localStorage.removeItem("token");
-        navigate("/login", { replace: true });
-        return;
-      }
-
-      if (!res.ok) throw new Error(data.detail || "Submit failed.");
-
-      // (3) go to result page
-      navigate(`/smes/${id}/capability`);
-    } catch (e) {
-      setError(e.message || "Submit failed.");
-    } finally {
-      setSubmitting(false);
-    }
+    navigate("/evaluator-home", { state: { activeTab: "scoring" } });
+  } catch (e) {
+    setError(e.message || "Submit failed.");
+  } finally {
+    setSubmitting(false);
   }
+}
+  
+  
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      {/* Navbar */}
-      <nav
+      <header
         style={{
           ...styles.navbar,
-          borderBottom: `1px solid ${theme.border}`,
           background: theme.navBg,
+          borderBottom: `1px solid ${theme.border}`,
         }}
       >
-        {/* Brand */}
-        <div
-          style={{ ...styles.brand, cursor: "pointer" }}
-          onClick={() => navigate("/")}
-        >
+        <div style={styles.brand} onClick={() => navigate("/evaluator-home")}>
           <img src={logo} alt="SME logo" style={styles.logoImg} />
-          <div style={{ lineHeight: 1.1 }}>
+          <div style={styles.brandTextWrap}>
             <div style={{ ...styles.brandTitle, color: theme.text }}>
               SME Scoring
             </div>
-            <div style={{ ...styles.brandSub, color: theme.muted }}>
-              Decision Support Platform
+            <div style={{ ...styles.brandSub, color: theme.subText }}>
+              Evaluator Workspace
             </div>
           </div>
         </div>
 
-        {/* Right buttons */}
-        <div style={styles.navRight}>
-          <button
-            style={{
-              ...styles.ghostBtn,
-              background: theme.card,
-              color: theme.text,
-              border: `1px solid ${theme.borderStrong}`,
-            }}
-            onClick={() => setDark((v) => !v)}
-          >
-            {dark ? "Light Mode" : "Dark Mode"}
-          </button>
+        <div style={styles.rightWrap}>
+          
 
-          {/* ✅ Evaluator profile button (change path if your profile page route differs) */}
           <button
             style={{
-              ...styles.ghostBtn,
-              background: "transparent",
-              color: theme.text,
-              border: `1px solid ${theme.borderStrong}`,
+              ...styles.profileBtn,
+              background: theme.button,
+              color: "#fff",
+              borderRadius: 14,
+              width: "auto",
+              padding: "0 16px",
             }}
             onClick={() => navigate("/evaluator-home")}
           >
-            Evaluator Profile
+            Back
           </button>
         </div>
-      </nav>
+      </header>
 
-      {/* Header */}
-      <section style={styles.header}>
+      <section style={styles.pageHero}>
         <div style={{ ...styles.heroGlow, background: theme.heroGlow }} />
-        <div style={styles.headerInner}>
-          <div>
-            <div style={{ ...styles.kicker, color: theme.muted }}>
-              SME Scoring
-            </div>
-            <div style={{ ...styles.headerTitle, color: theme.text }}>
-              SME: {loading ? "Loading…" : sme?.name || "—"} • ID #{id}
-            </div>
-            <div style={{ ...styles.headerSub, color: theme.muted }}>
-              Select the best matching band description. Use Next/Previous to move.
-            </div>
+        <div style={styles.main}>
+          <div style={styles.sectionHeader}>
+          
+            <h1 style={{ ...styles.sectionTitle, color: theme.subText }}>
+              {loading ? "Loading SME..." : `BR number:${sme?.br_number || "Br"} `} <br />
+              {`SME Name:${sme?.name || "SME"} `}<br />
+              { `Industry:${sme?.industry || "industry"} `}
+            </h1>
           </div>
 
-          <div style={styles.headerRight}>
+          {error && (
             <div
               style={{
-                ...styles.pill,
-                border: `1px solid ${theme.borderStrong}`,
-                background: theme.card,
-                color: theme.text,
+                ...styles.alert,
+                background: theme.errorBg,
+                color: theme.errorText,
+                border: `1px solid ${theme.errorBorder}`,
               }}
             >
-              Progress:{" "}
-              <span style={{ fontWeight: 950 }}>
-                {progress.scored}/{progress.total}
-              </span>
+              {error}
             </div>
-
-            <button
-              style={{
-                ...styles.ghostBtn,
-                background: theme.card,
-                color: theme.text,
-                border: `1px solid ${theme.borderStrong}`,
-                opacity: savingDraft ? 0.7 : 1,
-              }}
-              onClick={saveDraftToBackend}
-              disabled={savingDraft}
-            >
-              {savingDraft ? "Saving…" : "Save draft"}
-            </button>
-          </div>
+          )}
         </div>
-
-        {error && (
-          <div
-            style={{
-              ...styles.alert,
-              border: `1px solid ${
-                dark ? "rgba(255,90,90,0.35)" : "#FECACA"
-              }`,
-              background: dark ? "rgba(255,90,90,0.10)" : "#FEF2F2",
-              color: dark ? "rgba(255,255,255,0.92)" : "#991B1B",
-            }}
-          >
-            {error}
-          </div>
-        )}
       </section>
 
-      {/* Main layout */}
-      <div style={styles.layout}>
-        {/* Sidebar: criteria navigation */}
-        <aside style={styles.sidebarWrap}>
-          <div
+      <main style={styles.main}>
+        
+
+        <div style={styles.scoringLayout}>
+          <aside
             style={{
-              ...styles.sidebar,
+              ...styles.sidebarCard,
               background: theme.card,
               border: `1px solid ${theme.border}`,
-              boxShadow: dark
-                ? "0 20px 45px rgba(0,0,0,0.22)"
-                : "0 20px 45px rgba(0,0,0,0.10)",
             }}
           >
-            <div style={{ ...styles.sidebarTitle, color: theme.text }}>
-              Criteria
+            <div style={styles.sectionHeader}>
+              <h3 style={{ ...styles.sideTitle, color: theme.text }}>Criteria</h3>
+              <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                Select a criterion
+              </p>
             </div>
 
-            <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "grid", gap: 12 }}>
               {rubric.map((r, idx) => {
                 const val = scores[r.code]?.score;
+                const selected = idx === activeIndex;
                 const done = typeof val === "number";
-                const activeNav = idx === activeIndex;
 
                 return (
                   <button
                     key={r.code}
                     onClick={() => goToIndex(idx)}
                     style={{
-                      ...styles.criteriaBtn,
-                      background: activeNav
-                        ? (dark ? "rgba(47,150,180,0.16)" : "rgba(47,150,180,0.12)")
-                        : done
-                        ? (dark ? "rgba(47,150,180,0.10)" : "rgba(47,150,180,0.08)")
-                        : theme.bg,
-                      border: `1px solid ${activeNav ? theme.button : theme.border}`,
+                      ...styles.criteriaNavBtn,
+                      background: selected
+                        ? theme.tabActiveBg
+                        : theme.resultBg,
+                      border: `1px solid ${
+                        selected ? theme.tabActiveBorder : theme.border
+                      }`,
                       color: theme.text,
                     }}
                   >
-                    <div style={{ textAlign: "left" }}>
-                      <div style={{ fontWeight: 950, fontSize: 13 }}>
-                        {r.code}
-                      </div>
-                      <div style={{ fontSize: 12, color: theme.muted }}>
+                    <div style={{ textAlign: "left", flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>{r.code}</div>
+                      <div style={{ fontSize: 13, color: theme.subText, marginTop: 4 }}>
                         {r.title}
                       </div>
                     </div>
 
-                    <span
+                    <div
                       style={{
-                        ...styles.badge,
-                        border: `1px solid ${theme.border}`,
-                        background: theme.card,
-                        color: theme.text,
+                        ...styles.criteriaBadge,
+                        background: done ? theme.button : theme.card,
+                        color: done ? "#fff" : theme.text,
+                        border: `1px solid ${done ? theme.button : theme.border}`,
                       }}
                     >
                       {done ? val : "—"}
-                    </span>
+                    </div>
                   </button>
                 );
               })}
             </div>
-          </div>
-        </aside>
+          </aside>
 
-        {/* Single criterion card */}
-        <main style={styles.cards}>
           <section
             ref={cardRef}
             style={{
-              ...styles.card,
+              ...styles.searchCard,
               background: theme.card,
               border: `1px solid ${theme.border}`,
-              boxShadow: dark
-                ? "0 20px 45px rgba(0,0,0,0.22)"
-                : "0 20px 45px rgba(0,0,0,0.10)",
             }}
           >
-            <div style={styles.cardTop}>
-              <div>
-                <div style={{ ...styles.code, color: theme.muted }}>
-                  {activeCriterion.code} • {activeIndex + 1}/{rubric.length}
-                </div>
-                <div style={{ ...styles.cardTitle, color: theme.text }}>
-                  {activeCriterion.title}
-                </div>
-                <div style={{ ...styles.helper, color: theme.muted }}>
-                  Click one band description to set score automatically.
-                </div>
-              </div>
-
-              {/* Fine tune */}
-              <div style={styles.fineTune}>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={typeof activeScore === "number" ? activeScore : 5}
-                  onChange={(e) =>
-                    setScore(
-                      activeCriterion.code,
-                      clampScore(Number(e.target.value))
-                    )
-                  }
-                  style={{ width: 220 }}
-                />
-
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={activeScore ?? ""}
-                  onChange={(e) =>
-                    setScore(
-                      activeCriterion.code,
-                      e.target.value === ""
-                        ? null
-                        : clampScore(Number(e.target.value))
-                    )
-                  }
-                  placeholder="—"
-                  style={{
-                    ...styles.numberInput,
-                    background: theme.bg,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                  }}
-                />
-              </div>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>{activeCriterion.title}</h2>
+              <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                {activeCriterion.code} • Criterion {activeIndex + 1} of {rubric.length}
+              </p>
             </div>
 
-            {/* Bands */}
-            <div style={{ marginTop: 14 }}>
-              <div style={styles.bandsHeader}>
-                <div style={{ fontWeight: 950, color: theme.text }}>
-                  Rubric bands
-                </div>
-                <div style={{ fontSize: 12, color: theme.muted }}>
-                  {selectedBandKey ? `Selected: ${selectedBandKey}` : "Not selected yet"}
-                </div>
-              </div>
+            <div style={styles.rangeRow}>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={typeof activeScore === "number" ? activeScore : 5}
+                onChange={(e) =>
+                  setScore(
+                    activeCriterion.code,
+                    clampScore(Number(e.target.value))
+                  )
+                }
+                style={{ width: "100%" }}
+              />
 
-              <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-                {bands.map((b) => {
-                  const activeBand = selectedBandKey === b.key;
-
-                  return (
-                    <button
-                      key={b.key}
-                      type="button"
-                      onClick={() => setBand(activeCriterion.code, b)}
-                      style={{
-                        ...styles.bandCard,
-                        background: activeBand
-                          ? (dark
-                              ? "rgba(47,150,180,0.12)"
-                              : "rgba(47,150,180,0.10)")
-                          : theme.bg,
-                        border: `1px solid ${
-                          activeBand ? theme.button : theme.border
-                        }`,
-                        color: theme.text,
-                      }}
-                    >
-                      <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                        <div
-                          style={{
-                            ...styles.bandIcon,
-                            background: theme.iconBg,
-                            color: theme.text,
-                            border: `1px solid ${theme.border}`,
-                          }}
-                        >
-                          {activeBand ? "✓" : "＋"}
-                        </div>
-
-                        <div style={{ flex: 1, textAlign: "left" }}>
-                          <div style={{ fontWeight: 950, fontSize: 14 }}>
-                            {b.label}
-                          </div>
-                          <div
-                            style={{
-                              marginTop: 6,
-                              color: theme.muted,
-                              fontSize: 13,
-                              lineHeight: 1.45,
-                            }}
-                          >
-                            {activeCriterion.desc?.[b.key] ?? "—"}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={activeScore ?? ""}
+                onChange={(e) =>
+                  setScore(
+                    activeCriterion.code,
+                    e.target.value === ""
+                      ? null
+                      : clampScore(Number(e.target.value))
+                  )
+                }
+                placeholder="—"
+                style={{
+                  ...styles.scoreInput,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
             </div>
 
-            {/* Notes */}
-            <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+            <div style={{ marginTop: 18 }}>
+  <div style={styles.bandsHeader}>
+    <div style={{ fontWeight: 800, color: theme.text }}>Rubric Bands</div>
+    <div style={{ fontSize: 12, color: theme.subText }}>
+      {selectedBandKey ? `Selected: ${selectedBandKey}` : "Not selected yet"}
+    </div>
+  </div>
+
+  <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+    {bands.map((b) => {
+      const activeBand = selectedBandKey === b.key;
+
+      return (
+        <button
+          key={b.key}
+          type="button"
+          onClick={() => setBand(activeCriterion.code, b)}
+          style={{
+            ...styles.bandCard,
+            background: activeBand ? theme.tabActiveBg : theme.resultBg,
+            border: `1px solid ${
+              activeBand ? theme.button : theme.border
+            }`,
+            color: theme.text,
+          }}
+        >
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div
+              style={{
+                ...styles.bandIcon,
+                background: theme.iconBg1,
+                color: theme.text,
+                border: `1px solid ${theme.border}`,
+              }}
+            >
+              {activeBand ? "✓" : "＋"}
+            </div>
+
+            <div style={{ flex: 1, textAlign: "left" }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{b.label}</div>
+              <div
+                style={{
+                  marginTop: 6,
+                  color: theme.subText,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                }}
+              >
+                {activeCriterion.desc?.[b.key] ?? "—"}
+              </div>
+            </div>
+          </div>
+        </button>
+      );
+    })}
+  </div>
+</div>
+
+            <div style={{ marginTop: 20 }}>
+              <label style={styles.label}>Notes</label>
               <textarea
                 value={active.notes}
                 onChange={(e) =>
@@ -722,12 +643,12 @@ export default function RubricScoringPage() {
                     },
                   }))
                 }
-                placeholder="Evidence / notes (optional but recommended)"
+                placeholder="Evidence / notes"
                 style={{
                   ...styles.textarea,
-                  background: theme.bg,
-                  border: `1px solid ${theme.border}`,
+                  background: theme.inputBg,
                   color: theme.text,
+                  border: `1px solid ${theme.border}`,
                 }}
               />
 
@@ -736,7 +657,10 @@ export default function RubricScoringPage() {
                   display: "flex",
                   gap: 10,
                   alignItems: "center",
+                  marginTop: 14,
                   color: theme.text,
+                  fontSize: 14,
+                  fontWeight: 600,
                 }}
               >
                 <input
@@ -752,64 +676,76 @@ export default function RubricScoringPage() {
                     }))
                   }
                 />
-                <span style={{ fontSize: 13, color: theme.muted }}>
-                  Need follow-up info
-                </span>
+                Need follow-up information
               </label>
             </div>
 
-            {/* Navigation buttons */}
-            <div style={styles.navRow}>
+            <div style={styles.bottomActions}>
               <button
                 style={{
-                  ...styles.ghostBtn,
+                  ...styles.searchBtn,
                   background: theme.card,
                   color: theme.text,
-                  border: `1px solid ${theme.borderStrong}`,
-                  opacity: activeIndex === 0 ? 0.55 : 1,
+                  border: `1px solid ${theme.border}`,
+                  boxShadow: "none",
+                  opacity: activeIndex === 0 ? 0.6 : 1,
                 }}
                 disabled={activeIndex === 0}
                 onClick={() => goToIndex(activeIndex - 1)}
               >
-                ← Previous
+                Previous
               </button>
 
-              {activeIndex < rubric.length - 1 ? (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 <button
                   style={{
-                    ...styles.primaryBtn,
-                    background: theme.button,
-                    color: theme.buttonText,
-                    opacity: 1,
+                    ...styles.searchBtn,
+                    background: theme.resultBg,
+                    color: theme.text,
+                    border: `1px solid ${theme.border}`,
+                    boxShadow: "none",
                   }}
-                  onClick={() => goToIndex(activeIndex + 1)}
+                  onClick={saveDraftToBackend}
+                  disabled={savingDraft}
                 >
-                  Next →
+                  {savingDraft ? "Saving..." : "Save Draft"}
                 </button>
-              ) : (
-                <button
-                  style={{
-                    ...styles.primaryBtn,
-                    background: theme.button,
-                    color: theme.buttonText,
-                    opacity:
-                      progress.scored === progress.total && !submitting ? 1 : 0.65,
-                  }}
-                  disabled={progress.scored !== progress.total || submitting}
-                  onClick={submitFinal}
-                >
-                  {submitting ? "Submitting…" : "Submit Final"}
-                </button>
-              )}
+
+                {activeIndex < rubric.length - 1 ? (
+                  <button
+                    style={{
+                      ...styles.searchBtn,
+                      background: theme.button,
+                    }}
+                    onClick={() => goToIndex(activeIndex + 1)}
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    style={{
+                      ...styles.searchBtn,
+                      background: theme.button,
+                      opacity:
+                        progress.scored === progress.total && !submitting ? 1 : 0.65,
+                    }}
+                    disabled={progress.scored !== progress.total || submitting}
+                    onClick={submitFinal}
+                    
+                  >
+                    {submitting ? "Submitting..." : "Submit Final"}
+                  </button>
+                )}
+              </div>
             </div>
           </section>
-        </main>
-      </div>
+        </div>
+      </main>
 
       <footer
         style={{
           ...styles.footer,
-          color: theme.muted,
+          color: theme.subText,
           borderTop: `1px solid ${theme.border}`,
         }}
       >
@@ -819,251 +755,357 @@ export default function RubricScoringPage() {
   );
 }
 
-/* =========================
-   Styles
-========================= */
 const styles = {
   page: {
     minHeight: "100vh",
-    width: "100%",
-    display: "flex",
-    flexDirection: "column",
-    overflowX: "hidden",
-    fontFamily: "system-ui, Avenir, Helvetica, Arial, sans-serif",
+    fontFamily: "Inter, Arial, sans-serif",
   },
+
   navbar: {
+    minHeight: 76,
+    padding: "14px 28px",
+    display: "grid",
+    gridTemplateColumns: "1fr auto",
+    alignItems: "center",
     position: "sticky",
     top: 0,
-    zIndex: 30,
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "14px 5%",
-    alignItems: "center",
-    flexWrap: "wrap",
+    zIndex: 50,
     backdropFilter: "blur(10px)",
+    gap: 16,
   },
+
   brand: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    minWidth: 220,
+    gap: 14,
+    cursor: "pointer",
+    minWidth: 260,
   },
-  logoImg: {
-    width: 92,
-    height: 62,
-    objectFit: "contain",
-  },
-  brandTitle: {
-    fontWeight: 950,
-    letterSpacing: 0.2,
-    fontSize: 20,
-  },
-  brandSub: {
-    fontSize: 12,
-    opacity: 0.9,
-    marginTop: 2,
-  },
-  navRight: {
+
+  brandTextWrap: {
     display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    lineHeight: 1.1,
+  },
+
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: 800,
+    letterSpacing: "-0.3px",
+    marginBottom: 3,
+  },
+
+  brandSub: {
+    fontSize: 13,
+    fontWeight: 500,
+  },
+
+  logoImg: {
+    width: 108,
+    height: 58,
+    objectFit: "contain",
+    display: "block",
+  },
+
+  rightWrap: {
+    display: "flex",
+    justifyContent: "flex-end",
+    alignItems: "center",
     gap: 10,
     flexWrap: "wrap",
-    alignItems: "center",
   },
-  ghostBtn: {
-    padding: "9px 14px",
-    borderRadius: 10,
-    border: "1px solid",
+
+  iconBtn: {
+    height: 46,
+    borderRadius: 14,
     cursor: "pointer",
-    background: "transparent",
-    fontWeight: 800,
-  },
-  primaryBtn: {
-    padding: "9px 16px",
-    borderRadius: 10,
+    fontSize: 14,
     border: "none",
+  },
+
+  profileBtn: {
+    height: 46,
     cursor: "pointer",
-    fontWeight: 900,
+    fontSize: 14,
+    fontWeight: 800,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+    border: "none",
   },
-  header: {
+
+  main: {
+    width: "min(1180px, 92%)",
+    margin: "0 auto",
+    paddingBottom: 40,
+  },
+
+  pageHero: {
     position: "relative",
-    padding: "22px 5% 14px",
+    padding: "24px 0 6px",
   },
+
   heroGlow: {
     position: "absolute",
     inset: 0,
     pointerEvents: "none",
   },
-  headerInner: {
-    position: "relative",
-    zIndex: 1,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 16,
-    flexWrap: "wrap",
-  },
-  kicker: {
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
-  headerTitle: {
-    marginTop: 6,
-    fontSize: "clamp(20px, 2.6vw, 30px)",
-    fontWeight: 950,
-    letterSpacing: -0.4,
-    lineHeight: 1.15,
-  },
-  headerSub: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 1.5,
-    maxWidth: 780,
-  },
-  headerRight: {
-    position: "relative",
-    zIndex: 1,
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "flex-end",
-  },
-  pill: {
-    padding: "9px 12px",
-    borderRadius: 12,
-    fontWeight: 900,
-    fontSize: 13,
-  },
+
   alert: {
-    position: "relative",
-    zIndex: 1,
-    marginTop: 12,
+    padding: "14px 16px",
     borderRadius: 14,
-    padding: "10px 12px",
-    fontWeight: 800,
-    fontSize: 13,
+    marginTop: 16,
+    fontWeight: 600,
   },
-  layout: {
-    width: "min(1200px, 100%)",
-    margin: "0 auto",
-    padding: "14px 5% 24px",
+
+  sectionBlock: {
+    marginTop: 24,
+  },
+
+  sectionHeader: {
+    marginBottom: 16,
+  },
+
+  sectionTitle: {
+    margin: 0,
+    fontSize: 24,
+    fontWeight: 800,
+  },
+
+  sectionSub: {
+    marginTop: 6,
+    fontSize: 14,
+  },
+
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 18,
+  },
+
+  statCard: {
+    borderRadius: 22,
+    padding: 22,
+    boxShadow: "0 12px 28px rgba(15,23,42,0.05)",
+  },
+
+  statIconWrap: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 24,
+    marginBottom: 18,
+  },
+
+  statLabel: {
+    fontSize: 14,
+    opacity: 0.78,
+    marginBottom: 8,
+    fontWeight: 600,
+  },
+
+  statValue: {
+    fontSize: 34,
+    fontWeight: 800,
+    lineHeight: 1,
+  },
+
+  scoringLayout: {
+    marginTop: 30,
     display: "grid",
     gridTemplateColumns: "320px 1fr",
-    gap: 16,
+    gap: 20,
+    alignItems: "start",
   },
-  sidebarWrap: { position: "relative" },
-  sidebar: {
+
+  sidebarCard: {
+    borderRadius: 26,
+    padding: 22,
+    boxShadow: "0 14px 34px rgba(15,23,42,0.05)",
     position: "sticky",
-    top: 92,
-    borderRadius: 16,
-    padding: 16,
+    top: 100,
   },
-  sidebarTitle: {
-    fontWeight: 950,
-    marginBottom: 12,
-    fontSize: 14,
-    letterSpacing: 0.2,
+
+  sideTitle: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 800,
   },
-  criteriaBtn: {
+
+  criteriaNavBtn: {
     width: "100%",
-    borderRadius: 14,
-    padding: "10px 12px",
+    borderRadius: 18,
+    padding: 14,
     cursor: "pointer",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
-  badge: {
-    fontSize: 12,
-    fontWeight: 950,
-    padding: "6px 10px",
+
+  criteriaBadge: {
+    minWidth: 42,
+    height: 34,
+    padding: "0 10px",
     borderRadius: 999,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    fontWeight: 800,
     whiteSpace: "nowrap",
   },
-  cards: { display: "grid", gap: 16, alignContent: "start" },
-  card: { borderRadius: 16, padding: 18 },
-  cardTop: {
+
+  searchCard: {
+    borderRadius: 26,
+    padding: 26,
+    boxShadow: "0 14px 34px rgba(15,23,42,0.05)",
+  },
+
+  rangeRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 100px",
+    gap: 12,
+    alignItems: "center",
+    marginTop: 6,
+  },
+
+  scoreInput: {
+    width: "100%",
+    padding: "13px 14px",
+    borderRadius: 14,
+    outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
+    fontWeight: 700,
+  },
+
+  resultCard: {
+    marginTop: 0,
+    padding: 18,
+    borderRadius: 18,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 14,
+    gap: 16,
     flexWrap: "wrap",
   },
-  code: {
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
-  cardTitle: {
-    marginTop: 6,
-    fontWeight: 950,
-    fontSize: 18,
-    letterSpacing: -0.2,
-  },
-  helper: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 1.45,
-    maxWidth: 640,
-  },
-  fineTune: { display: "flex", alignItems: "center", gap: 10 },
-  numberInput: {
-    width: 72,
-    padding: "8px 10px",
-    borderRadius: 12,
-    outline: "none",
-    fontWeight: 900,
-  },
-  bandsHeader: {
+
+  resultLeft: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
+    flexDirection: "column",
+    gap: 4,
+    flex: 1,
   },
-  bandCard: {
-    width: "100%",
-    borderRadius: 16,
-    padding: 14,
-    cursor: "pointer",
-    textAlign: "left",
-  },
-  bandIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    display: "grid",
-    placeItems: "center",
+
+  resultTitle: {
     fontSize: 18,
-    fontWeight: 950,
-    flexShrink: 0,
+    fontWeight: 800,
   },
+
+  resultSub: {
+    fontSize: 14,
+    lineHeight: 1.6,
+  },
+
+  actionWrap: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  searchBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "15px 18px",
+    borderRadius: 16,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 15,
+    boxShadow: "0 10px 22px rgba(47,150,180,0.25)",
+  },
+
+  smallPrimaryBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "11px 15px",
+    borderRadius: 12,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 14,
+  },
+
+  label: {
+    display: "block",
+    marginBottom: 8,
+    marginTop: 14,
+    fontWeight: 700,
+    fontSize: 14,
+  },
+
   textarea: {
     width: "100%",
-    minHeight: 96,
+    minHeight: 110,
+    padding: "13px 14px",
     borderRadius: 14,
-    padding: 12,
     outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
     resize: "vertical",
   },
-  navRow: {
-    marginTop: 18,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-  },
-  footer: {
-    marginTop: "auto",
-    padding: "18px 5%",
+
+  bottomActions: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
     flexWrap: "wrap",
+    marginTop: 22,
   },
+
+  footer: {
+    width: "min(1180px, 92%)",
+    margin: "20px auto 0",
+    padding: "18px 0 26px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    fontSize: 14,
+  },
+  bandsHeader: {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+},
+
+bandCard: {
+  width: "100%",
+  borderRadius: 18,
+  padding: 16,
+  cursor: "pointer",
+  textAlign: "left",
+  boxSizing: "border-box",
+},
+
+bandIcon: {
+  width: 46,
+  height: 46,
+  borderRadius: 14,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 18,
+  fontWeight: 800,
+  flexShrink: 0,
+},
 };

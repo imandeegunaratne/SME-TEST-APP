@@ -4,15 +4,34 @@ import logo from "../assets/logo.png";
 
 const BRAND = "#2F96B4";
 
-const theme = {
+const darkTheme = {
   bg: "#0B1220",
-  navBg: "rgba(11,18,32,0.78)",
+  navBg: "rgba(16,24,38,0.92)",
+  card: "#172033",
+  dropdownBg: "#10192b",
+  inputBg: "#0f172a",
   text: "#FFFFFF",
-  muted: "rgba(255,255,255,0.78)",
+  muted: "rgba(255,255,255,0.72)",
   border: "rgba(255,255,255,0.10)",
   borderStrong: "rgba(255,255,255,0.18)",
   button: BRAND,
   buttonText: "#FFFFFF",
+  shadow: "0 14px 34px rgba(15,23,42,0.18)",
+};
+
+const lightTheme = {
+  bg: "#F4F7FB",
+  navBg: "rgba(255,255,255,0.92)",
+  card: "#FFFFFF",
+  dropdownBg: "#FFFFFF",
+  inputBg: "#FFFFFF",
+  text: "#0F172A",
+  muted: "#475569",
+  border: "rgba(15,23,42,0.10)",
+  borderStrong: "rgba(15,23,42,0.16)",
+  button: BRAND,
+  buttonText: "#FFFFFF",
+  shadow: "0 14px 34px rgba(15,23,42,0.08)",
 };
 
 const industries = [
@@ -42,6 +61,16 @@ const industries = [
 export default function SmeRegister() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
+
+  const [themeMode] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    return saved === "light" ? "light" : "dark";
+  });
+
+  const theme = useMemo(
+    () => (themeMode === "dark" ? darkTheme : lightTheme),
+    [themeMode]
+  );
 
   const [form, setForm] = useState({
     name: "",
@@ -129,58 +158,59 @@ export default function SmeRegister() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: theme.bg, color: theme.text }}>
-      {/* NAVBAR */}
+    <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
       <header
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          padding: "14px 5%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          ...styles.navbar,
           background: theme.navBg,
           borderBottom: `1px solid ${theme.border}`,
-          backdropFilter: "blur(10px)",
         }}
       >
         <div
-          style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+          style={styles.brand}
           onClick={() => navigate("/evaluator-home")}
         >
-          <img src={logo} alt="logo" style={{ width: 90, height: 60 }} />
+          <img src={logo} alt="logo" style={styles.logoImg} />
           <div>
-            <div style={{ fontWeight: 900 }}>SME Scoring</div>
-            <div style={{ fontSize: 12, color: theme.muted }}>
-              Decision Support Platform
+            <div style={{ ...styles.brandTitle, color: theme.text }}>
+              SME Scoring
+            </div>
+            <div style={{ ...styles.brandSub, color: theme.muted }}>
+              Evaluator Workspace
             </div>
           </div>
         </div>
       </header>
 
-      {/* PAGE BODY */}
-      <div style={{ width: "min(600px, 92%)", margin: "40px auto" }}>
+      <main style={styles.main}>
         <div
           style={{
-            background: "#172033",
-            padding: 20,
-            borderRadius: 16,
-            border: "1px solid rgba(255,255,255,0.15)",
+            ...styles.card,
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            boxShadow: theme.shadow,
           }}
         >
-          <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 8 }}>
+          <h2 style={{ ...styles.title, color: theme.text }}>
             Register New SME
           </h2>
+          <p style={{ ...styles.subText, color: theme.muted }}>
+            Add SME details before starting the evaluation process.
+          </p>
 
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
+          <form onSubmit={onSubmit} style={styles.form}>
             <input
               name="name"
               value={form.name}
               onChange={onChange}
               required
               placeholder="SME Name"
-              style={inputStyle}
+              style={{
+                ...styles.input,
+                background: theme.inputBg,
+                color: theme.text,
+                border: `1px solid ${theme.borderStrong}`,
+              }}
             />
 
             <input
@@ -189,56 +219,74 @@ export default function SmeRegister() {
               onChange={onChange}
               required
               placeholder="BR Number"
-              style={inputStyle}
+              style={{
+                ...styles.input,
+                background: theme.inputBg,
+                color: theme.text,
+                border: `1px solid ${theme.borderStrong}`,
+              }}
             />
 
-            {/* SEARCHABLE INDUSTRY DROPDOWN */}
             <div style={{ position: "relative" }} ref={dropdownRef}>
               <div
                 onClick={() => setIndustryOpen((s) => !s)}
                 style={{
-                  ...inputStyle,
+                  ...styles.input,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   cursor: "pointer",
-                  minHeight: 44,
+                  minHeight: 48,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.borderStrong}`,
                 }}
               >
-                <span style={{ color: form.industry ? "#fff" : "rgba(255,255,255,0.55)" }}>
+                <span style={{ color: form.industry ? theme.text : theme.muted }}>
                   {form.industry || "Select Industry"}
                 </span>
-                <span style={{ fontSize: 12 }}>▼</span>
+                <span style={{ fontSize: 12, color: theme.muted }}>▼</span>
               </div>
 
               {industryOpen && (
-                <div style={dropdownMenu}>
+                <div
+                  style={{
+                    ...styles.dropdownMenu,
+                    background: theme.dropdownBg,
+                    border: `1px solid ${theme.borderStrong}`,
+                    boxShadow: theme.shadow,
+                  }}
+                >
                   <input
                     type="text"
                     placeholder="Search industry..."
                     value={industrySearch}
                     onChange={(e) => setIndustrySearch(e.target.value)}
                     style={{
-                      ...inputStyle,
-                      width: "100%",
+                      ...styles.input,
                       marginBottom: 10,
-                      outline: "none",
+                      background: theme.inputBg,
+                      color: theme.text,
+                      border: `1px solid ${theme.borderStrong}`,
                     }}
                   />
 
-                  <div style={optionsList}>
+                  <div style={styles.optionsList}>
                     {filteredIndustries.length > 0 ? (
                       filteredIndustries.map((item) => (
                         <div
                           key={item}
                           onClick={() => selectIndustry(item)}
-                          style={optionStyle}
+                          style={{
+                            ...styles.optionStyle,
+                            color: theme.text,
+                          }}
                         >
                           {item}
                         </div>
                       ))
                     ) : (
-                      <div style={{ padding: 10, color: "rgba(255,255,255,0.7)" }}>
+                      <div style={{ padding: 10, color: theme.muted }}>
                         No industry found
                       </div>
                     )}
@@ -247,22 +295,46 @@ export default function SmeRegister() {
               )}
             </div>
 
-            <button type="submit" style={btnStyle} disabled={loading}>
+            <button
+              type="submit"
+              style={{
+                ...styles.btn,
+                background: theme.button,
+                color: theme.buttonText,
+              }}
+              disabled={loading}
+            >
               {loading ? "Saving..." : "Register SME"}
             </button>
           </form>
         </div>
-      </div>
+      </main>
 
-      {/* MODAL */}
       {modal && (
-        <div style={modalOverlay}>
-          <div style={modalBox}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>
+        <div style={styles.modalOverlay}>
+          <div
+            style={{
+              ...styles.modalBox,
+              background: theme.card,
+              color: theme.text,
+              border: `1px solid ${theme.borderStrong}`,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 18 }}>
               {modal.type === "error" ? "Registration Failed" : "Success"}
             </div>
-            <div style={{ marginTop: 10 }}>{modal.message}</div>
-            <button style={{ ...btnStyle, marginTop: 16 }} onClick={() => setModal(null)}>
+            <div style={{ marginTop: 10, color: theme.muted }}>
+              {modal.message}
+            </div>
+            <button
+              style={{
+                ...styles.btn,
+                marginTop: 16,
+                background: theme.button,
+                color: theme.buttonText,
+              }}
+              onClick={() => setModal(null)}
+            >
               OK
             </button>
           </div>
@@ -272,67 +344,126 @@ export default function SmeRegister() {
   );
 }
 
-const inputStyle = {
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.04)",
-  color: "#fff",
-  width: "100%",
-  boxSizing: "border-box",
-};
+const styles = {
+  page: {
+    minHeight: "100vh",
+    fontFamily: "Inter, Arial, sans-serif",
+  },
 
-const btnStyle = {
-  padding: 12,
-  borderRadius: 10,
-  border: "none",
-  background: "#2F96B4",
-  color: "#fff",
-  fontWeight: 900,
-  cursor: "pointer",
-};
+  navbar: {
+    position: "sticky",
+    top: 0,
+    zIndex: 20,
+    padding: "14px 5%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backdropFilter: "blur(10px)",
+  },
 
-const dropdownMenu = {
-  position: "absolute",
-  top: "calc(100% + 8px)",
-  left: 0,
-  right: 0,
-  background: "#10192b",
-  border: "1px solid rgba(255,255,255,0.15)",
-  borderRadius: 12,
-  padding: 10,
-  zIndex: 20,
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-};
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    cursor: "pointer",
+  },
 
-const optionsList = {
-  maxHeight: 220,
-  overflowY: "auto",
-  borderRadius: 8,
-};
+  logoImg: {
+    width: 90,
+    height: 60,
+    objectFit: "contain",
+  },
 
-const optionStyle = {
-  padding: "10px 12px",
-  borderRadius: 8,
-  cursor: "pointer",
-  color: "#fff",
-  background: "transparent",
-};
+  brandTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+  },
 
-const modalOverlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.6)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
+  brandSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
 
-const modalBox = {
-  background: "#172033",
-  padding: 20,
-  borderRadius: 16,
-  width: 350,
-  textAlign: "center",
-  border: "1px solid rgba(255,255,255,0.12)",
+  main: {
+    width: "min(600px, 92%)",
+    margin: "40px auto",
+  },
+
+  card: {
+    padding: 24,
+    borderRadius: 20,
+  },
+
+  title: {
+    fontSize: 24,
+    fontWeight: 800,
+    margin: 0,
+  },
+
+  subText: {
+    marginTop: 8,
+    marginBottom: 18,
+    fontSize: 14,
+  },
+
+  form: {
+    display: "grid",
+    gap: 12,
+  },
+
+  input: {
+    padding: 12,
+    borderRadius: 12,
+    width: "100%",
+    boxSizing: "border-box",
+    outline: "none",
+    fontSize: 14,
+  },
+
+  btn: {
+    padding: 12,
+    borderRadius: 12,
+    border: "none",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+
+  dropdownMenu: {
+    position: "absolute",
+    top: "calc(100% + 8px)",
+    left: 0,
+    right: 0,
+    borderRadius: 12,
+    padding: 10,
+    zIndex: 20,
+  },
+
+  optionsList: {
+    maxHeight: 220,
+    overflowY: "auto",
+    borderRadius: 8,
+  },
+
+  optionStyle: {
+    padding: "10px 12px",
+    borderRadius: 8,
+    cursor: "pointer",
+  },
+
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.6)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
+
+  modalBox: {
+    padding: 20,
+    borderRadius: 16,
+    width: 350,
+    textAlign: "center",
+  },
 };
