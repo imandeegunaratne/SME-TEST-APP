@@ -2,7 +2,7 @@
 
 from django.contrib.auth.models import User
 from rest_framework import serializers
-
+from .models import EvaluatorNotification   
 from .models import SME, Bank, Profile
 
 
@@ -68,3 +68,9 @@ class EvaluatorSignupSerializer(serializers.Serializer):
         )
 
         return user
+class EvaluatorNotificationSerializer(serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+
+    class Meta:
+        model = EvaluatorNotification
+        fields = ["id", "title", "message", "is_read", "created_at"]

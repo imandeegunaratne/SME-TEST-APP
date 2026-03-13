@@ -39,8 +39,9 @@ export default function Signup() {
   }
 
   setLoading(true);
+
   try {
-    const res = await fetch("/api/auth/evaluator-signup/", {
+    const res = await fetch("/api/signup/evaluator/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -53,6 +54,9 @@ export default function Signup() {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      console.log("Signup response:", data);
+      console.log("Status:", res.status);
+
       let message = "Signup failed.";
 
       if (data.detail) {
@@ -72,13 +76,15 @@ export default function Signup() {
     }
 
     setMsg("Account created. Wait for bank admin approval before login.");
-    setTimeout(() => navigate("/login"),4000);
+    setTimeout(() => navigate("/login"), 4000);
   } catch (e2) {
-    setErr(e2.message);
+    setErr(e2.message || "Signup failed.");
   } finally {
     setLoading(false);
   }
 }
+
+
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
       <div

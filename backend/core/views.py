@@ -12,9 +12,19 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Profile, SME, CriterionWeight, SMECriterionScore
+from .models import (
+    EvaluatorNotification,
+    Profile,
+    SME,
+    CriterionWeight,
+    SMECriterionScore,
+)
 from .permission import IsBankAdmin, IsApprovedUser
-from .serializers import SMEListSerializer, EvaluatorSignupSerializer
+from .serializers import (
+    SMEListSerializer,
+    EvaluatorSignupSerializer,
+    EvaluatorNotificationSerializer,
+)
 
 
 # ==========================
@@ -62,7 +72,7 @@ def _get_evaluator_profile_or_403(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    if not profile.is_active:
+    if not profile.is_active or not user.is_active:
         return None, Response(
             {"detail": "Account disabled. Contact bank admin."},
             status=status.HTTP_403_FORBIDDEN,
@@ -201,6 +211,12 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        if not user.is_active:
+            return Response(
+                {"detail": "Your account has been blocked. Please contact your bank admin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if profile.role == "EVALUATOR":
             if not profile.is_approved:
                 return Response(
@@ -209,7 +225,7 @@ class LoginView(APIView):
                 )
             if not profile.is_active:
                 return Response(
-                    {"detail": "Your account is inactive. Contact bank admin."},
+                    {"detail": "Your account has been blocked by the bank admin."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
@@ -319,9 +335,141 @@ class ApproveEvaluatorView(APIView):
 
         profile.is_approved = True
         profile.is_active = True
+        profile.user.is_active = True
+
+        profile.user.save(update_fields=["is_active"])
         profile.save(update_fields=["is_approved", "is_active"])
 
+        EvaluatorNotification.objects.create(
+            user=profile.user,
+            title="Account Approved",
+            message="Your evaluator account has been approved. You can now log in and start using the system.",
+        )
+
         return Response({"detail": "Evaluator approved."}, status=status.HTTP_200_OK)
+
+
+class DisapproveEvaluatorView(APIView):
+    permission_classes = [IsAuthenticated, IsBankAdmin]
+
+    def post(self, request, profile_id):
+        bank = request.user.profile.bank
+
+        try:
+            profile = Profile.objects.select_related("user").get(
+                id=profile_id,
+                bank=bank,
+                role="EVALUATOR",
+            )
+        except Profile.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        profile.is_approved = False
+        profile.is_active = False
+        profile.user.is_active = False
+
+        profile.user.save(update_fields=["is_active"])
+        profile.save(update_fields=["is_approved", "is_active"])
+
+        EvaluatorNotification.objects.create(
+            user=profile.user,
+            title="Account Disapproved",
+            message="Your evaluator account request was disapproved by the bank admin. You cannot log in to the system.",
+        )
+
+        return Response(
+            {"detail": "Evaluator disapproved and blocked."},
+            status=status.HTTP_200_OK,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsBankAdmin])
+def block_evaluator(request, profile_id):
+    profile = get_object_or_404(
+        Profile.objects.select_related("user"),
+        id=profile_id,
+        role="EVALUATOR",
+        bank=request.user.profile.bank,
+    )
+
+    profile.is_active = False
+    profile.user.is_active = False
+
+    profile.user.save(update_fields=["is_active"])
+    profile.save(update_fields=["is_active"])
+
+    EvaluatorNotification.objects.create(
+        user=profile.user,
+        title="Account Blocked",
+        message="Your evaluator account has been blocked by the bank admin. Please contact your bank admin.",
+    )
+
+    return Response({"message": "Evaluator blocked successfully."})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsBankAdmin])
+def unblock_evaluator(request, profile_id):
+    profile = get_object_or_404(
+        Profile.objects.select_related("user"),
+        id=profile_id,
+        role="EVALUATOR",
+        bank=request.user.profile.bank,
+    )
+
+    if not profile.is_approved:
+        return Response(
+            {"detail": "This evaluator is not approved yet."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    profile.is_active = True
+    profile.user.is_active = True
+
+    profile.user.save(update_fields=["is_active"])
+    profile.save(update_fields=["is_active"])
+
+    EvaluatorNotification.objects.create(
+        user=profile.user,
+        title="Account Unblocked",
+        message="Your evaluator account has been unblocked. You can now log in again.",
+    )
+
+    return Response({"message": "Evaluator unblocked successfully."})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsBankAdmin])
+def search_evaluators(request):
+    q = request.GET.get("q", "").strip()
+    bank = request.user.profile.bank
+
+    queryset = (
+        Profile.objects.filter(bank=bank, role="EVALUATOR")
+        .select_related("user", "bank")
+        .order_by("user__username")
+    )
+
+    if q:
+        queryset = queryset.filter(user__username__icontains=q)
+
+    data = [
+        {
+            "profile_id": p.id,
+            "user_id": p.user.id,
+            "username": p.user.username,
+            "first_name": p.user.first_name,
+            "last_name": p.user.last_name,
+            "email": p.user.email,
+            "is_approved": p.is_approved,
+            "is_active": p.is_active,
+            "bank_name": p.bank.name if p.bank else "",
+        }
+        for p in queryset
+    ]
+
+    return Response(data, status=status.HTTP_200_OK)
 
 
 # ==========================
@@ -420,10 +568,6 @@ class SMEScoringByBRView(APIView):
 
 
 class EvaluatorSMEsView(APIView):
-    """
-    GET /api/evaluator/smes/
-    Returns SMEs for evaluator's bank
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request):
@@ -436,10 +580,6 @@ class EvaluatorSMEsView(APIView):
 
 
 class EvaluatorSummaryView(APIView):
-    """
-    GET /api/evaluator/summary/
-    Summary for evaluator's bank
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request):
@@ -472,9 +612,6 @@ class EvaluatorSummaryView(APIView):
 
 
 class SMECreateView(APIView):
-    """
-    POST /api/smes/
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def post(self, request):
@@ -521,10 +658,6 @@ class SMECreateView(APIView):
 
 
 class SMEScoreUpdateView(APIView):
-    """
-    POST /api/smes/<id>/score/
-    Stores final score on SME.
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def post(self, request, pk):
@@ -582,10 +715,6 @@ class SMEScoreUpdateView(APIView):
 # Criterion Weights / Scores
 # ==========================
 class CriterionWeightsView(APIView):
-    """
-    GET /api/criteria/weights/
-    Returns active criterion weights
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request):
@@ -599,11 +728,6 @@ class CriterionWeightsView(APIView):
 
 
 class SMECriterionScoresView(APIView):
-    """
-    GET  /api/smes/<id>/criterion-scores/
-    POST /api/smes/<id>/criterion-scores/
-    body: {"scores":[{"code":"C1","score":7,"notes":"..","followup":false}, ...]}
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request, pk):
@@ -717,9 +841,6 @@ class SMECriterionScoresView(APIView):
 # Capability Submit / Result
 # ==========================
 class SMESubmitCapabilityView(APIView):
-    """
-    POST /api/smes/<id>/submit-capability/
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def post(self, request, pk):
@@ -799,10 +920,6 @@ class SMESubmitCapabilityView(APIView):
 
 
 class SMECapabilityResultView(APIView):
-    """
-    GET /api/smes/<id>/capability-result/
-    Recompute live from DB
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request, pk):
@@ -996,15 +1113,10 @@ def bank_admin_industry_analysis(request):
 
     return Response(data)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def bank_admin_evaluator_analysis(request):
-    """
-    Returns:
-    - approved evaluator count
-    - pending evaluator count
-    - evaluator-wise scoring summary for this bank
-    """
     user = request.user
     if not _is_bank_admin(user):
         return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
@@ -1081,11 +1193,6 @@ def bank_admin_evaluator_analysis(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def bank_admin_evaluator_score_distribution(request, evaluator_id):
-    """
-    Detailed view for one evaluator:
-    - summary of this evaluator's scoring
-    - all SMEs scored by this evaluator in this bank
-    """
     user = request.user
     if not _is_bank_admin(user):
         return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
@@ -1170,8 +1277,7 @@ def bank_admin_criterion_analysis(request):
                 sme__bank=bank,
                 sme__is_active=True,
                 score__isnull=False,
-                criterion_code=code,\
-                
+                criterion_code=code,
             )
             .select_related("sme")
             .order_by("sme__br_number")
@@ -1181,8 +1287,6 @@ def bank_admin_criterion_analysis(request):
             average_score=Avg("score"),
             total_entries=Count("id"),
         )
-
-       
 
         data.append(
             {
@@ -1201,6 +1305,7 @@ def bank_admin_criterion_analysis(request):
         )
 
     return Response(data)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1269,3 +1374,21 @@ def bank_admin_sme_comparison(request):
         )
 
     return Response(data)
+
+
+# ==========================
+# Evaluator Notifications
+# ==========================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def evaluator_notifications(request):
+    items = EvaluatorNotification.objects.filter(user=request.user).order_by("-created_at")
+    serializer = EvaluatorNotificationSerializer(items, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def mark_evaluator_notifications_read(request):
+    EvaluatorNotification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+    return Response({"detail": "Notifications marked as read."})
