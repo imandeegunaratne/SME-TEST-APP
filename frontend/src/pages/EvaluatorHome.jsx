@@ -362,7 +362,7 @@ export default function EvaluatorHome() {
                 color: theme.text,
               }}
             >
-              🔔
+              N
             </button>
 
             {showNotifications && (
@@ -458,24 +458,33 @@ export default function EvaluatorHome() {
                 <div style={{ color: theme.subText }}>Loading summary...</div>
               ) : (
                 <div style={styles.statsGrid}>
-                  <div
-                    style={{
-                      ...styles.statCard,
-                      background: theme.card,
-                      border: `1px solid ${theme.border}`,
-                    }}
-                  >
                     <div
-                      style={{
-                        ...styles.statIconWrap,
-                        background: theme.iconBg1,
-                      }}
-                    >
-                      📁
-                    </div>
-                    <div style={styles.statLabel}>Total SMEs</div>
-                    <div style={styles.statValue}>{summary.total_smes}</div>
-                  </div>
+  style={{
+    ...styles.statCard,
+    background: theme.card,
+    border: `1px solid ${theme.border}`,
+  }}
+>
+  <div
+    style={{
+      ...styles.statIconWrap,
+      background: theme.iconBg1,
+    }}
+  >
+    <img
+      src={logo}
+      alt="SME"
+      style={{
+        width: "24px",
+        height: "24px",
+        objectFit: "contain",
+      }}
+    />
+  </div>
+
+  <div style={styles.statLabel}>Total SMEs</div>
+  <div style={styles.statValue}>{summary.total_smes}</div>
+</div>
 
                   <div
                     style={{
@@ -490,7 +499,7 @@ export default function EvaluatorHome() {
                         background: theme.iconBg2,
                       }}
                     >
-                      ✅
+                      
                     </div>
                     <div style={styles.statLabel}>Scored SMEs</div>
                     <div style={styles.statValue}>{summary.scored_smes}</div>
@@ -509,7 +518,7 @@ export default function EvaluatorHome() {
                         background: theme.iconBg3,
                       }}
                     >
-                      ⏳
+                      
                     </div>
                     <div style={styles.statLabel}>Pending SMEs</div>
                     <div style={styles.statValue}>{summary.pending_smes}</div>
@@ -611,7 +620,7 @@ export default function EvaluatorHome() {
               </div>
 
               <div style={styles.featureBox}>
-                <div style={styles.featureIcon}>🏢</div>
+                <div style={styles.featureIcon}></div>
                 <div>
                   <div style={styles.featureTitle}>New SME Registration</div>
                   <div style={{ ...styles.featureText, color: theme.subText }}>
@@ -897,8 +906,9 @@ const styles = {
   },
 
   brandSub: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 500,
+    marginTop: 4,
   },
 
   logoImg: {

@@ -24,44 +24,61 @@ export default function Signup() {
   }
 
   async function onSubmit(e) {
-    e.preventDefault();
-    setMsg("");
-    setErr("");
+  e.preventDefault();
+  setMsg("");
+  setErr("");
 
-    if (form.password.length < 8) {
-      setErr("Password must be at least 8 characters.");
-      return;
-    }
-
-    if (form.password !== form.confirm) {
-      setErr("Passwords do not match.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/evaluator-signup/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bank_code: form.bank_code.trim(),
-          username: form.username.trim(),
-          password: form.password,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "Signup failed.");
-
-      setMsg("Account created. You can login now.");
-      setTimeout(() => navigate("/login"), 800);
-    } catch (e2) {
-      setErr(e2.message);
-    } finally {
-      setLoading(false);
-    }
+  if (form.password.length < 8) {
+    setErr("Password must be at least 8 characters.");
+    return;
   }
 
+  if (form.password !== form.confirm) {
+    setErr("Passwords do not match.");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch("/api/auth/evaluator-signup/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bank_code: form.bank_code.trim(),
+        username: form.username.trim(),
+        password: form.password,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      let message = "Signup failed.";
+
+      if (data.detail) {
+        message = data.detail;
+      } else if (typeof data === "object" && data !== null) {
+        const firstKey = Object.keys(data)[0];
+        const firstValue = data[firstKey];
+
+        if (Array.isArray(firstValue) && firstValue.length > 0) {
+          message = firstValue[0];
+        } else if (typeof firstValue === "string") {
+          message = firstValue;
+        }
+      }
+
+      throw new Error(message);
+    }
+
+    setMsg("Account created. Wait for bank admin approval before login.");
+    setTimeout(() => navigate("/login"),4000);
+  } catch (e2) {
+    setErr(e2.message);
+  } finally {
+    setLoading(false);
+  }
+}
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
       <div
@@ -76,7 +93,9 @@ export default function Signup() {
 
         <h1 style={{ ...styles.title, color: theme.text }}>Evaluator Signup</h1>
         <h3 style={{ ...styles.title2}}>
-          Enter your bank code to join the correct bank.
+         Please note:<br></br>
+          *Enter your bank code to join the correct bank.<br></br>
+          *Enter bank code infront of the username that you decide
         </h3>
 
         <form onSubmit={onSubmit} style={styles.form}>

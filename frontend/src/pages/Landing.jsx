@@ -118,7 +118,7 @@ export default function Landing() {
             
 
             <h1 style={{ ...styles.title, color: theme.text }}>
-              Smarter SME evaluation for better lending decisions
+              SME evaluation for better lending decisions
             </h1>
 
             <p style={{ ...styles.subtitle, color: theme.muted }}>

@@ -18,32 +18,47 @@ export default function Login() {
   }
 
   async function onSubmit(e) {
-    e.preventDefault();
-    setErr("");
-    setLoading(true);
+  e.preventDefault();
+  setErr("");
+  setLoading(true);
 
-    try {
-      const res = await fetch("/api/auth/login/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  localStorage.removeItem("username");
+  localStorage.removeItem("bank_name");
+  localStorage.removeItem("bank_code");
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "Login failed");
+  try {
+    const res = await fetch("/api/auth/login/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("role", data.role);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Login failed");
 
-      if (data.role === "BANK_ADMIN") navigate("/bank-admin-dashboard");
-      else navigate("/evaluator-home");
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("role", data.role);
+    localStorage.setItem("username", data.username || "");
+    localStorage.setItem("bank_name", data.bank_name || "");
+    localStorage.setItem("bank_code", data.bank_code || "");
 
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setLoading(false);
-    }
+    if (data.role === "BANK_ADMIN") navigate("/bank-admin-dashboard");
+    else navigate("/evaluator-home");
+
+  } catch (e) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("username");
+    localStorage.removeItem("bank_name");
+    localStorage.removeItem("bank_code");
+
+    setErr(e.message);
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <div style={{ ...styles.page, background: theme.bg }}>

@@ -27,11 +27,10 @@ class SMEListSerializer(serializers.ModelSerializer):
 
 class EvaluatorSignupSerializer(serializers.Serializer):
     username = serializers.CharField()
-    password = serializers.CharField(write_only=True, min_length=6)
+    password = serializers.CharField(write_only=True, min_length=8)
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
-
     bank_code = serializers.CharField()
 
     def validate_username(self, value):
@@ -44,26 +43,22 @@ class EvaluatorSignupSerializer(serializers.Serializer):
 
     def validate_bank_code(self, value):
         value = (value or "").strip()
-        if not Bank.objects.filter(code=value).exists():
+        if not Bank.objects.filter(code__iexact=value).exists():
             raise serializers.ValidationError("Invalid bank code.")
         return value
 
     def create(self, validated_data):
         bank_code = validated_data.pop("bank_code")
-        bank = Bank.objects.get(code=bank_code)
-
-        username = validated_data["username"]
-        password = validated_data["password"]
+        bank = Bank.objects.get(code__iexact=bank_code)
 
         user = User.objects.create_user(
-            username=username,
-            password=password,
+            username=validated_data["username"].strip(),
+            password=validated_data["password"],
             first_name=validated_data.get("first_name", ""),
             last_name=validated_data.get("last_name", ""),
             email=validated_data.get("email", ""),
         )
 
-        # ✅ Force evaluator workflow
         Profile.objects.create(
             user=user,
             bank=bank,

@@ -19,7 +19,15 @@ from .views import (
     SMECriterionScoresView,
     SMESubmitCapabilityView,
     SMECapabilityResultView,
-    ChangePasswordView
+    ChangePasswordView,
+    bank_admin_dashboard_summary,
+    bank_admin_pending_evaluators,
+    bank_admin_industry_analysis,
+    bank_admin_evaluator_analysis,
+    bank_admin_criterion_analysis,
+    bank_admin_sme_list,
+    bank_admin_sme_comparison,
+    bank_admin_evaluator_score_distribution
     
 )
 
@@ -50,4 +58,12 @@ urlpatterns = [
 
     path("smes/<int:pk>/report/", SMEReportView.as_view(), name="sme-report"),
     path("smes/<int:pk>/report/pdf/", SMEReportPDFView.as_view(), name="sme-report-pdf"),
+    path("bank-admin/dashboard-summary/", bank_admin_dashboard_summary),
+    path("bank-admin/pending-evaluators/", bank_admin_pending_evaluators),
+    path("bank-admin/industry-analysis/", bank_admin_industry_analysis),
+    path("bank-admin/evaluator-analysis/", bank_admin_evaluator_analysis),
+    path("bank-admin/criterion-analysis/", bank_admin_criterion_analysis),
+    path("bank-admin/smes/", bank_admin_sme_list),
+    path("bank-admin/sme-comparison/", bank_admin_sme_comparison),
+    path("bank-admin/evaluator-score-distribution/<int:evaluator_id>/",bank_admin_evaluator_score_distribution,),
 ]
