@@ -168,12 +168,12 @@ const styles = {
   },
   title: {
     marginBottom: 8,
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 700,
   },
   subtitle: {
     marginBottom: 20,
-    fontSize: 14,
+    fontSize: 20,
   },
   form: {
     display: "flex",
@@ -199,7 +199,7 @@ const styles = {
     background: "transparent",
     cursor: "pointer",
     color: "#2F96B4",
-    fontSize: 14,
+    fontSize: 18,
   },
   error: {
     color: "#DC2626",

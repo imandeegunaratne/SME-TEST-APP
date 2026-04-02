@@ -50,6 +50,12 @@ class SMEReportView(APIView):
 
         capability, rows, weaknesses = _compute_capability_excel(scores_by_code, weights_by_code)
 
+        # Collect all non-empty notes from each criterion
+        overall_notes = "\n".join(
+        f"{code}: {data['notes']}"
+        for code, data in scores_by_code.items()
+        if data.get("notes", "").strip()
+        )
         return Response({
             "id": sme.id,
             "name": sme.name,
@@ -62,6 +68,7 @@ class SMEReportView(APIView):
             "criteria": rows,
             "weaknesses": weaknesses,
             "capability_score": capability,
+            "additional_details": overall_notes,
         })
 class SMEReportPDFView(APIView):
     permission_classes = [IsAuthenticated]

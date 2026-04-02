@@ -219,7 +219,7 @@ const styles = {
   },
   title: {
     marginBottom: 10,
-    fontSize: 26,
+    fontSize: 32,
     fontWeight: 700,
   },
   note: {
@@ -253,14 +253,14 @@ const styles = {
     color: "#2F96B4",
     textAlign: "left",
     padding: 0,
-    fontSize: 14,
+    fontSize: 18,
   },
   error: {
     color: "#DC2626",
-    fontSize: 14,
+    fontSize: 18,
   },
   success: {
     color: "#059669",
-    fontSize: 14,
+    fontSize: 18,
   },
 };

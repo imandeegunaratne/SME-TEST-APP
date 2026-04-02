@@ -40,6 +40,19 @@ export default function BankAdminDashboard() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
 
+const CRITERIA_NAMES = [
+  "Business opportunity gap",
+  "Customer pains and gains",
+  "Intrest to take risk",
+  "Stakeholder Engagement & Support",
+  "Competitive Position",
+  "Management & Workforce Capability",
+  "Streams of Revenue",
+  "Cost Control & Efficiency",
+  "Taking adavantage of state assistance",
+  "Operational Readiness",
+];
+                                      
   useEffect(() => {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
@@ -1243,14 +1256,25 @@ export default function BankAdminDashboard() {
                                 <div style={{ color: theme.subText }}>
                                   No criterion scores available.
                                 </div>
-                              ) : (
-                                Object.entries(item.criteria).map(([code, score]) => (
-                                  <div key={code} style={styles.criteriaRow}>
-                                    <span>{code}</span>
-                                    <strong>{score}</strong>
-                                  </div>
-                                ))
-                              )}
+                                    ) : (
+
+                                  
+                                  Object.entries(item.criteria)
+                                    .sort(([codeA], [codeB]) => {
+                                      const numA = parseInt(codeA.replace(/\D/g, ""), 10);
+                                      const numB = parseInt(codeB.replace(/\D/g, ""), 10);
+                                      return numA - numB;
+                                    })
+                                    .map(([code, score]) => {
+                                      const num = parseInt(code.replace(/\D/g, ""), 10);
+                                      const name = CRITERIA_NAMES[num - 1] || code;
+                                      return (
+                                        <div key={code} style={styles.criteriaRow}>
+                                          <span>{code} — {name}</span>
+                                          <strong>{score}</strong>
+                                        </div>
+                                      );
+                                    }))}
                             </div>
                           ))}
                         </div>

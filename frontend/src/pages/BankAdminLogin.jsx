@@ -211,7 +211,7 @@ const styles = {
   },
   h2: {
     margin: 0,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 800,
   },
   sub: {
@@ -225,7 +225,7 @@ const styles = {
     gap: 10,
   },
   label: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: 600,
     marginTop: 2,
   },

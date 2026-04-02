@@ -77,11 +77,15 @@ export default function SMEReport() {
       }
     })();
   }, [id, token, navigate]);
-
+  function formatScoreDecimal(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  return Number.isNaN(num) ? "—" : num.toFixed(2);
+}
   function formatScore(value) {
     if (value === null || value === undefined || value === "") return "—";
     const num = Number(value);
-    return Number.isNaN(num) ? "—" : num.toFixed(2);
+    return Number.isNaN(num) ? "—" : Math.round(num).toString();
   }
 
   function getCriterionCode(item, index) {
@@ -271,9 +275,9 @@ export default function SMEReport() {
             </div>
 
             <div style={styles.scoreBox}>
-              <div style={styles.scoreBoxLabel}>Score</div>
+              <div style={styles.scoreBoxLabel}>Total Score</div>
               <div style={styles.scoreBoxValue}>
-                {formatScore(data.capability_score)}
+                {formatScoreDecimal(data.capability_score)}
               </div>
             </div>
           </div>
