@@ -1,9 +1,7 @@
-# backend/core/serializers.py
-
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import EvaluatorNotification   
-from .models import SME, Bank, Profile
+
+from .models import Bank, EvaluatorNotification, Profile, SME
 
 
 class SMECreateSerializer(serializers.ModelSerializer):
@@ -21,7 +19,6 @@ class SMECreateSerializer(serializers.ModelSerializer):
 class SMEListSerializer(serializers.ModelSerializer):
     class Meta:
         model = SME
-        # ✅ removed created_at to avoid FieldError if model doesn't have it
         fields = ["id", "name", "br_number", "industry", "is_scored", "total_score"]
 
 
@@ -37,26 +34,29 @@ class EvaluatorSignupSerializer(serializers.Serializer):
         value = (value or "").strip()
         if not value:
             raise serializers.ValidationError("Username is required.")
-        if User.objects.filter(username=value).exists():
+        if User.objects.filter(username__iexact=value).exists():
             raise serializers.ValidationError("This username is already taken.")
         return value
 
     def validate_bank_code(self, value):
         value = (value or "").strip()
-        if not Bank.objects.filter(code__iexact=value).exists():
+        if not value:
+            raise serializers.ValidationError("Bank code is required.")
+        if not Bank.objects.filter(code__iexact=value, is_active=True).exists():
             raise serializers.ValidationError("Invalid bank code.")
         return value
 
     def create(self, validated_data):
-        bank_code = validated_data.pop("bank_code")
-        bank = Bank.objects.get(code__iexact=bank_code)
+        bank_code = validated_data.pop("bank_code").strip()
+        bank = Bank.objects.get(code__iexact=bank_code, is_active=True)
 
         user = User.objects.create_user(
             username=validated_data["username"].strip(),
             password=validated_data["password"],
-            first_name=validated_data.get("first_name", ""),
-            last_name=validated_data.get("last_name", ""),
-            email=validated_data.get("email", ""),
+            first_name=(validated_data.get("first_name") or "").strip(),
+            last_name=(validated_data.get("last_name") or "").strip(),
+            email=(validated_data.get("email") or "").strip(),
+            is_active=False,
         )
 
         Profile.objects.create(
@@ -68,6 +68,8 @@ class EvaluatorSignupSerializer(serializers.Serializer):
         )
 
         return user
+
+
 class EvaluatorNotificationSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
 

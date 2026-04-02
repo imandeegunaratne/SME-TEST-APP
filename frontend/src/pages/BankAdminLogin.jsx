@@ -1,7 +1,5 @@
-// src/pages/BankAdminLogin.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png";
 
 export default function BankAdminLogin() {
   const navigate = useNavigate();
@@ -14,7 +12,8 @@ export default function BankAdminLogin() {
   const [loading, setLoading] = useState(false);
 
   function onChange(e) {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   async function onSubmit(e) {
@@ -22,12 +21,18 @@ export default function BankAdminLogin() {
     setErr("");
     setLoading(true);
 
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("username");
+    localStorage.removeItem("bank_name");
+    localStorage.removeItem("bank_code");
+
     try {
-      const res = await fetch("/api/auth/login/", {
+      const res = await fetch("/api/login/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: form.username,
+          username: form.username.trim(),
           password: form.password,
         }),
       });
@@ -35,27 +40,27 @@ export default function BankAdminLogin() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.detail || "Login failed. Check credentials.");
+        throw new Error(data.detail || "Login failed.");
+      }
+
+      if (data.role !== "BANK_ADMIN") {
+        throw new Error("This account is not a bank admin account.");
       }
 
       localStorage.setItem("token", data.token || "");
-      localStorage.setItem("username", data.username || "");
       localStorage.setItem("role", data.role || "");
-      if (data.bank_name) localStorage.setItem("bank_name", data.bank_name);
-      if (data.bank_code) localStorage.setItem("bank_code", data.bank_code);
-
-      if (data.role !== "BANK_ADMIN") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("username");
-        localStorage.removeItem("role");
-        localStorage.removeItem("bank_name");
-        localStorage.removeItem("bank_code");
-        throw new Error("This account is not a bank admin.");
-      }
+      localStorage.setItem("username", data.username || "");
+      localStorage.setItem("bank_name", data.bank_name || "");
+      localStorage.setItem("bank_code", data.bank_code || "");
 
       navigate("/bank-admin-dashboard");
-    } catch (err2) {
-      setErr(err2.message || "Unable to login. Please try again.");
+    } catch (error) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
+      localStorage.removeItem("username");
+      localStorage.removeItem("bank_name");
+      localStorage.removeItem("bank_code");
+      setErr(error.message || "Unable to login.");
     } finally {
       setLoading(false);
     }
@@ -72,8 +77,6 @@ export default function BankAdminLogin() {
             boxShadow: theme.shadow,
           }}
         >
-          
-
           <h2 style={{ ...styles.h2, color: theme.text }}>Bank Admin Login</h2>
           <p style={{ ...styles.sub, color: theme.mutedText }}>
             Sign in with your bank admin account.
@@ -194,7 +197,6 @@ const styles = {
     boxSizing: "border-box",
     fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   },
-
   centerWrap: {
     flex: 1,
     display: "flex",
@@ -202,99 +204,60 @@ const styles = {
     justifyContent: "center",
     padding: "24px 5%",
   },
-
   card: {
     width: "min(460px, 100%)",
     borderRadius: 20,
     padding: "28px 24px",
   },
-
-  brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 22,
-  },
-
-  logo: {
-    width: 55,
-    height: 55,
-    objectFit: "contain",
-  },
-
-  brandTitle: {
-    fontSize: 18,
-    fontWeight: 800,
-    letterSpacing: -0.3,
-    lineHeight: 1.1,
-  },
-
-  brandSub: {
-    fontSize: 12,
-    marginTop: 3,
-  },
-
   h2: {
     margin: 0,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: 800,
-    letterSpacing: -0.3,
   },
-
   sub: {
     marginTop: 8,
-    marginBottom: 0,
+    marginBottom: 20,
     fontSize: 14,
     lineHeight: 1.6,
   },
-
   form: {
     display: "grid",
     gap: 10,
-    marginTop: 16,
   },
-
   label: {
-    fontSize: 13,
-    fontWeight: 800,
-    marginTop: 6,
+    fontSize: 14,
+    fontWeight: 600,
+    marginTop: 2,
   },
-
   input: {
-    padding: 12,
+    height: 46,
     borderRadius: 12,
+    padding: "0 14px",
     outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
     fontSize: 14,
   },
-
   primaryBtn: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    border: "none",
-    color: "white",
-    fontWeight: 800,
-    fontSize: 14,
-    cursor: "pointer",
-  },
-
-  link: {
-    marginTop: 10,
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 700,
-    textAlign: "left",
-    padding: 0,
-  },
-
-  errorBox: {
     marginTop: 8,
-    padding: "12px 14px",
+    height: 46,
+    border: "none",
     borderRadius: 12,
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  link: {
+    marginTop: 6,
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    textAlign: "left",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  errorBox: {
+    marginTop: 6,
+    borderRadius: 12,
+    padding: "10px 12px",
     fontSize: 14,
-    lineHeight: 1.5,
   },
 };

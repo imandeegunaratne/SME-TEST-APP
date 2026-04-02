@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -14,76 +13,81 @@ export default function Signup() {
     password: "",
     confirm: "",
   });
-
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
   function onChange(e) {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function extractErrorMessage(data) {
+    if (!data) return "Signup failed.";
+    if (typeof data.detail === "string") return data.detail;
+
+    if (typeof data === "object") {
+      for (const value of Object.values(data)) {
+        if (Array.isArray(value) && value.length > 0) return String(value[0]);
+        if (typeof value === "string") return value;
+      }
+    }
+
+    return "Signup failed.";
   }
 
   async function onSubmit(e) {
-  e.preventDefault();
-  setMsg("");
-  setErr("");
+    e.preventDefault();
+    setMsg("");
+    setErr("");
 
-  if (form.password.length < 8) {
-    setErr("Password must be at least 8 characters.");
-    return;
-  }
-
-  if (form.password !== form.confirm) {
-    setErr("Passwords do not match.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const res = await fetch("/api/signup/evaluator/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bank_code: form.bank_code.trim(),
-        username: form.username.trim(),
-        password: form.password,
-      }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      console.log("Signup response:", data);
-      console.log("Status:", res.status);
-
-      let message = "Signup failed.";
-
-      if (data.detail) {
-        message = data.detail;
-      } else if (typeof data === "object" && data !== null) {
-        const firstKey = Object.keys(data)[0];
-        const firstValue = data[firstKey];
-
-        if (Array.isArray(firstValue) && firstValue.length > 0) {
-          message = firstValue[0];
-        } else if (typeof firstValue === "string") {
-          message = firstValue;
-        }
-      }
-
-      throw new Error(message);
+    if (!form.bank_code.trim()) {
+      setErr("Bank code is required.");
+      return;
     }
 
-    setMsg("Account created. Wait for bank admin approval before login.");
-    setTimeout(() => navigate("/login"), 4000);
-  } catch (e2) {
-    setErr(e2.message || "Signup failed.");
-  } finally {
-    setLoading(false);
-  }
-}
+    if (!form.username.trim()) {
+      setErr("Username is required.");
+      return;
+    }
 
+    if (form.password.length < 8) {
+      setErr("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (form.password !== form.confirm) {
+      setErr("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/signup/evaluator/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bank_code: form.bank_code.trim(),
+          username: form.username.trim(),
+          password: form.password,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(extractErrorMessage(data));
+      }
+
+      setMsg("Account created successfully. Wait for bank admin approval before login.");
+      setTimeout(() => navigate("/login"), 1800);
+    } catch (error) {
+      setErr(error.message || "Signup failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
@@ -95,14 +99,11 @@ export default function Signup() {
           boxShadow: theme.shadow,
         }}
       >
-       
-
         <h1 style={{ ...styles.title, color: theme.text }}>Evaluator Signup</h1>
-        <h3 style={{ ...styles.title2}}>
-         Please note:<br></br>
-          *Enter your bank code to join the correct bank.<br></br>
-          *Enter bank code infront of the username that you decide
-        </h3>
+        <p style={{ ...styles.note, color: theme.muted }}>
+          Enter the correct bank code. Your account will be created as pending until
+          the bank admin approves it.
+        </p>
 
         <form onSubmit={onSubmit} style={styles.form}>
           <input
@@ -163,29 +164,20 @@ export default function Signup() {
             }}
           />
 
-          <button disabled={loading} style={styles.btn}>
-            {loading ? "Creating..." : "Create account"}
+          <button disabled={loading} style={styles.button}>
+            {loading ? "Creating account..." : "Create account"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            style={{ ...styles.link, color: theme.link }}
-          >
+          {msg && <div style={styles.success}>{msg}</div>}
+          {err && <div style={styles.error}>{err}</div>}
+
+          <button type="button" onClick={() => navigate("/login")} style={styles.link}>
+            Already have an account? Login
+          </button>
+          <button type="button" onClick={() => navigate("/")} style={styles.link}>
             Back to Home
           </button>
-
-          {msg && <div style={{ color: theme.success }}>{msg}</div>}
-          {err && <div style={{ color: theme.error }}>{err}</div>}
         </form>
-
-        <button
-          type="button"
-          onClick={() => navigate("/login")}
-          style={{ ...styles.bottomLink, color: theme.link }}
-        >
-          Already have an account? Login
-        </button>
       </div>
     </div>
   );
@@ -198,126 +190,77 @@ const lightTheme = {
   muted: "#64748B",
   border: "#E2E8F0",
   inputBg: "#FFFFFF",
-  link: "#2F96B4",
-  success: "green",
-  error: "crimson",
-  shadow: "0 20px 40px rgba(0,0,0,0.10)",
+  shadow: "0 16px 32px rgba(15,23,42,0.08)",
 };
 
 const darkTheme = {
   bg: "#071423",
-  card: "rgba(255,255,255,0.06)",
+  card: "#172033",
   text: "#FFFFFF",
-  muted: "rgba(255,255,255,0.7)",
+  muted: "rgba(255,255,255,0.75)",
   border: "rgba(255,255,255,0.14)",
-  inputBg: "transparent",
-  link: "#7DD3FC",
-  success: "#86EFAC",
-  error: "#FCA5A5",
-  shadow: "0 20px 40px rgba(0,0,0,0.20)",
+  inputBg: "rgba(255,255,255,0.04)",
+  shadow: "0 16px 32px rgba(0,0,0,0.18)",
 };
 
 const styles = {
   page: {
     minHeight: "100vh",
-    width: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
-    boxSizing: "border-box",
-    fontFamily: "system-ui",
+    padding: 24,
   },
-
   card: {
-    width: "min(520px, 100%)",
+    width: "100%",
+    maxWidth: 460,
+    padding: 30,
     borderRadius: 18,
-    padding: 22,
-    boxSizing: "border-box",
   },
-
-  brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 18,
-  },
-
-  logo: {
-    width: 55,
-    height: 55,
-    objectFit: "contain",
-  },
-
-  brandTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
-  brandSub: {
-    fontSize: 12,
-  },
-
   title: {
-    marginBottom: 18,
-    fontSize: 24,
-    fontWeight: "bold",
+    marginBottom: 10,
+    fontSize: 26,
+    fontWeight: 700,
   },
-  title2:{
-    marginBottom: 18,
-    fontSize: 16,
-    
+  note: {
+    marginBottom: 20,
+    fontSize: 14,
+    lineHeight: 1.6,
   },
-  sub: {
-    marginTop: 0,
-    marginBottom: 14,
-  },
-
   form: {
-    display: "grid",
-    gap: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
   },
-
   input: {
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
   },
-
-  btn: {
-    marginTop: 4,
+  button: {
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     border: "none",
     background: "#2F96B4",
     color: "white",
-    fontWeight: 800,
+    fontWeight: 700,
     cursor: "pointer",
-    width: "100%",
-    boxSizing: "border-box",
   },
-
   link: {
-    marginTop: 8,
-    background: "transparent",
     border: "none",
+    background: "transparent",
     cursor: "pointer",
+    color: "#2F96B4",
     textAlign: "left",
-    fontWeight: 700,
-    width: "100%",
-    boxSizing: "border-box",
+    padding: 0,
+    fontSize: 14,
   },
-
-  bottomLink: {
-    marginTop: 14,
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    textAlign: "left",
-    fontWeight: 700,
-    width: "100%",
-    boxSizing: "border-box",
+  error: {
+    color: "#DC2626",
+    fontSize: 14,
+  },
+  success: {
+    color: "#059669",
+    fontSize: 14,
   },
 };

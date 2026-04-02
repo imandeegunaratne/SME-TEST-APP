@@ -31,7 +31,14 @@ export default function BankAdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  // evaluator search + manage
+  const [searchEvaluator, setSearchEvaluator] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("theme", dark ? "dark" : "light");
@@ -90,6 +97,32 @@ export default function BankAdminDashboard() {
           data?.message ||
           data?.error ||
           text ||
+          `Request failed with status ${res.status}`
+      );
+    }
+
+    return data;
+  }
+
+  async function apiPost(url, body = {}) {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(
+        data?.detail ||
+          data?.message ||
+          data?.error ||
           `Request failed with status ${res.status}`
       );
     }
@@ -168,23 +201,106 @@ export default function BankAdminDashboard() {
   async function approve(profileId) {
     try {
       setError("");
-      const token = localStorage.getItem("token");
+      setSuccessMsg("");
+      setActionLoadingId(profileId);
 
-      const res = await fetch(`/api/bank-admin/approve-evaluator/${profileId}/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Token ${token}`,
-        },
-      });
+      await apiPost(`/api/bank-admin/approve-evaluator/${profileId}/`);
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || "Approval failed.");
-
+      setSuccessMsg("Evaluator approved successfully.");
       fetchPending();
       fetchAnalysisData();
+      if (searchEvaluator.trim()) {
+        handleSearchEvaluator();
+      }
     } catch (err) {
       setError(err.message || "Approval error.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function disapprove(profileId) {
+    try {
+      setError("");
+      setSuccessMsg("");
+      setActionLoadingId(profileId);
+
+      await apiPost(`/api/bank-admin/disapprove-evaluator/${profileId}/`);
+
+      setSuccessMsg("Evaluator disapproved and blocked successfully.");
+      fetchPending();
+      fetchAnalysisData();
+      if (searchEvaluator.trim()) {
+        handleSearchEvaluator();
+      }
+    } catch (err) {
+      setError(err.message || "Disapproval error.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function blockEvaluator(profileId) {
+    try {
+      setError("");
+      setSuccessMsg("");
+      setActionLoadingId(profileId);
+
+      await apiPost(`/api/bank-admin/block-evaluator/${profileId}/`);
+
+      setSuccessMsg("Evaluator blocked successfully.");
+      fetchPending();
+      fetchAnalysisData();
+      handleSearchEvaluator();
+    } catch (err) {
+      setError(err.message || "Block failed.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function unblockEvaluator(profileId) {
+    try {
+      setError("");
+      setSuccessMsg("");
+      setActionLoadingId(profileId);
+
+      await apiPost(`/api/bank-admin/unblock-evaluator/${profileId}/`);
+
+      setSuccessMsg("Evaluator unblocked successfully.");
+      fetchPending();
+      fetchAnalysisData();
+      handleSearchEvaluator();
+    } catch (err) {
+      setError(err.message || "Unblock failed.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function handleSearchEvaluator() {
+    try {
+      setError("");
+      setSuccessMsg("");
+      setSearchLoading(true);
+
+      if (!searchEvaluator.trim()) {
+        setSearchResults([]);
+        return;
+      }
+
+      const data = await apiGet(
+        `/api/bank-admin/search-evaluators/?q=${encodeURIComponent(
+          searchEvaluator.trim()
+        )}`
+      );
+
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Search failed.");
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
     }
   }
 
@@ -221,13 +337,17 @@ export default function BankAdminDashboard() {
 
   const industryMaxScore = useMemo(() => {
     if (!selectedIndustryData?.smes?.length) return 10;
-    const max = Math.max(...selectedIndustryData.smes.map((s) => Number(s.total_score || 0)));
+    const max = Math.max(
+      ...selectedIndustryData.smes.map((s) => Number(s.total_score || 0))
+    );
     return max || 10;
   }, [selectedIndustryData]);
 
   const criterionMaxScore = useMemo(() => {
     if (!selectedCriterionData?.scores?.length) return 10;
-    const max = Math.max(...selectedCriterionData.scores.map((s) => Number(s.score || 0)));
+    const max = Math.max(
+      ...selectedCriterionData.scores.map((s) => Number(s.score || 0))
+    );
     return max || 10;
   }, [selectedCriterionData]);
 
@@ -303,61 +423,232 @@ export default function BankAdminDashboard() {
       </header>
 
       <main style={styles.main}>
-        {error && <p style={{ color: "#ef4444", marginBottom: 16 }}>{error}</p>}
+        {error && (
+          <div
+            style={{
+              ...styles.messageBox,
+              background: "rgba(239,68,68,0.12)",
+              border: "1px solid rgba(239,68,68,0.35)",
+              color: "#ef4444",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {successMsg && (
+          <div
+            style={{
+              ...styles.messageBox,
+              background: "rgba(34,197,94,0.12)",
+              border: "1px solid rgba(34,197,94,0.35)",
+              color: "#22c55e",
+            }}
+          >
+            {successMsg}
+          </div>
+        )}
 
         {activeTab === "approval" && (
           <section>
             <div style={styles.sectionHeader}>
               <div>
-                <h2 style={{ margin: 0 }}>Pending Evaluator Accounts</h2>
+                <h1 style={{ margin: 0, fontWeight: 700 }}>Evaluator Approval & Access Control</h1>
                 <p style={{ marginTop: 8, color: theme.subText }}>
-                  Review and approve evaluator registrations for your bank.
+                  Approve, disapprove, search, and block evaluators from system access.
                 </p>
               </div>
             </div>
 
-            {loading && <p>Loading...</p>}
-
-            {!loading && pending.length === 0 && (
-              <div
-                style={{
-                  ...styles.emptyCard,
-                  background: theme.card,
-                  border: `1px solid ${theme.border}`,
-                  color: theme.subText,
-                }}
-              >
-                No pending approvals.
+            <div
+              style={{
+                ...styles.panel,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+                marginBottom: 24,
+              }}
+            >
+              <div style={styles.panelHead}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Pending Evaluator Accounts</h3>
+                  <p style={{ ...styles.panelSub, color: theme.subText }}>
+                    Approve new evaluator registrations or disapprove them to block access.
+                  </p>
+                </div>
               </div>
-            )}
 
-            <div style={styles.cardGrid}>
-              {pending.map((p) => (
+              {loading && <p>Loading...</p>}
+
+              {!loading && pending.length === 0 && (
                 <div
-                  key={p.id || p.profile_id}
                   style={{
-                    ...styles.card,
-                    background: theme.card,
+                    ...styles.emptyCard,
+                    background: theme.bg,
                     border: `1px solid ${theme.border}`,
+                    color: theme.subText,
                   }}
                 >
-                  <div style={styles.cardTop}>
-                    <div>
-                      <h3 style={{ margin: 0, color: theme.text }}>{p.username}</h3>
-                      <p style={{ margin: "8px 0 0", color: theme.subText }}>
-                        Evaluator account waiting for approval
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => approve(p.id || p.profile_id)}
-                    style={styles.approveBtn}
-                  >
-                    Approve
-                  </button>
+                  No pending approvals.
                 </div>
-              ))}
+              )}
+
+              <div style={styles.cardGrid}>
+                {pending.map((p) => {
+                  const profileId = p.id || p.profile_id;
+
+                  return (
+                    <div
+                      key={profileId}
+                      style={{
+                        ...styles.card,
+                        background: theme.bg,
+                        border: `1px solid ${theme.border}`,
+                      }}
+                    >
+                      <div style={styles.cardTop}>
+                        <div>
+                          <h3 style={{ margin: 0, color: theme.text }}>{p.username}</h3>
+                          <p style={{ margin: "8px 0 6px", color: theme.subText }}>
+                            Evaluator account waiting for approval
+                          </p>
+                          {p.bank_name && (
+                            <p style={{ margin: 0, color: theme.subText, fontSize: 13 }}>
+                              Bank: {p.bank_name}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={styles.actionRow}>
+                        <button
+                          onClick={() => approve(profileId)}
+                          disabled={actionLoadingId === profileId}
+                          style={styles.approveBtn}
+                        >
+                          {actionLoadingId === profileId ? "Please wait..." : "Approve"}
+                        </button>
+
+                        <button
+                          onClick={() => disapprove(profileId)}
+                          disabled={actionLoadingId === profileId}
+                          style={styles.disapproveBtn}
+                        >
+                          {actionLoadingId === profileId
+                            ? "Please wait..."
+                            : "Disapprove"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div
+              style={{
+                ...styles.panel,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+              }}
+            >
+              <div style={styles.panelHead}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Search and Manage Evaluators</h3>
+                  <p style={{ ...styles.panelSub, color: theme.subText }}>
+                    Search for any evaluator and block or unblock access to the system.
+                  </p>
+                </div>
+              </div>
+
+              <div style={styles.searchRow}>
+                <input
+                  type="text"
+                  value={searchEvaluator}
+                  onChange={(e) => setSearchEvaluator(e.target.value)}
+                  placeholder="Search by evaluator username"
+                  style={{
+                    ...styles.searchInput,
+                    background: theme.bg,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                  }}
+                />
+
+                <button onClick={handleSearchEvaluator} style={styles.searchBtn}>
+                  Search
+                </button>
+              </div>
+
+              {searchLoading && (
+                <p style={{ color: theme.subText, marginTop: 16 }}>
+                  Searching evaluators...
+                </p>
+              )}
+
+              {!searchLoading && searchEvaluator.trim() && searchResults.length === 0 && (
+                <div
+                  style={{
+                    ...styles.emptyCard,
+                    marginTop: 16,
+                    background: theme.bg,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.subText,
+                  }}
+                >
+                  No evaluators found.
+                </div>
+              )}
+
+              {searchResults.length > 0 && (
+                <div style={styles.cardGrid}>
+                  {searchResults.map((ev) => (
+                    <div
+                      key={ev.profile_id}
+                      style={{
+                        ...styles.card,
+                        background: theme.bg,
+                        border: `1px solid ${theme.border}`,
+                      }}
+                    >
+                      <h3 style={{ marginTop: 0, marginBottom: 8 }}>{ev.username}</h3>
+
+                      <div style={{ color: theme.subText, marginBottom: 6 }}>
+                        Role: Evaluator
+                      </div>
+                      <div style={{ color: theme.subText, marginBottom: 6 }}>
+                        Approval: {ev.is_approved ? "Approved" : "Not Approved"}
+                      </div>
+                      <div style={{ color: theme.subText, marginBottom: 14 }}>
+                        Status: {ev.is_active ? "Active" : "Blocked"}
+                      </div>
+
+                      <div style={styles.actionRow}>
+                        {ev.is_active ? (
+                          <button
+                            onClick={() => blockEvaluator(ev.profile_id)}
+                            disabled={actionLoadingId === ev.profile_id}
+                            style={styles.blockBtn}
+                          >
+                            {actionLoadingId === ev.profile_id
+                              ? "Please wait..."
+                              : "Block"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => unblockEvaluator(ev.profile_id)}
+                            disabled={actionLoadingId === ev.profile_id}
+                            style={styles.unblockBtn}
+                          >
+                            {actionLoadingId === ev.profile_id
+                              ? "Please wait..."
+                              : "Unblock"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -389,8 +680,7 @@ export default function BankAdminDashboard() {
                     <div>
                       <h3 style={{ margin: 0 }}>Evaluator Analysis</h3>
                       <p style={{ ...styles.panelSub, color: theme.subText }}>
-                        Evaluator counts, selected evaluator distribution, and
-                        total evaluations
+                        Evaluator counts, selected evaluator distribution, and total evaluations
                       </p>
                     </div>
                   </div>
@@ -862,8 +1152,6 @@ export default function BankAdminDashboard() {
                         </>
                       )}
                     </div>
-
-                    
                   </div>
 
                   <div
@@ -876,8 +1164,7 @@ export default function BankAdminDashboard() {
                   >
                     <h4 style={{ marginTop: 0 }}>SME Comparison Tool</h4>
                     <p style={{ color: theme.subText, marginTop: 6 }}>
-                      Select 2 or 3 SMEs to compare their total and criterion-level
-                      scores.
+                      Select 2 or 3 SMEs to compare their total and criterion-level scores.
                     </p>
 
                     <div style={styles.smeSelectGrid}>
@@ -1080,11 +1367,18 @@ const styles = {
   main: {
     padding: "34px 6%",
   },
+  messageBox: {
+    marginBottom: 16,
+    padding: "12px 14px",
+    borderRadius: 12,
+    fontWeight: 600,
+  },
   sectionHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 20,
+    fontWeight: 700,
   },
   analysisGrid: {
     display: "grid",
@@ -1130,18 +1424,6 @@ const styles = {
   subPanel: {
     padding: 18,
     borderRadius: 16,
-  },
-  listRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    padding: "12px 0",
-    borderBottom: "1px solid rgba(148,163,184,0.18)",
-  },
-  rightText: {
-    fontWeight: 700,
-    whiteSpace: "nowrap",
   },
   selectInput: {
     width: "100%",
@@ -1217,15 +1499,6 @@ const styles = {
     borderRadius: 14,
     textAlign: "center",
   },
-  criteriaGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-    gap: 16,
-  },
-  miniCard: {
-    padding: 16,
-    borderRadius: 14,
-  },
   smeSelectGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
@@ -1257,12 +1530,66 @@ const styles = {
     alignItems: "flex-start",
     gap: 12,
   },
-  approveBtn: {
+  actionRow: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
     marginTop: 18,
+  },
+  approveBtn: {
     padding: "10px 16px",
     borderRadius: 10,
     border: "none",
     background: "#22c55e",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  disapproveBtn: {
+    padding: "10px 16px",
+    borderRadius: 10,
+    border: "none",
+    background: "#ef4444",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  blockBtn: {
+    padding: "10px 16px",
+    borderRadius: 10,
+    border: "none",
+    background: "#ef4444",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  unblockBtn: {
+    padding: "10px 16px",
+    borderRadius: 10,
+    border: "none",
+    background: "#2F96B4",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  searchRow: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 260,
+    padding: "12px 14px",
+    borderRadius: 12,
+    outline: "none",
+  },
+  searchBtn: {
+    padding: "12px 18px",
+    borderRadius: 12,
+    border: "none",
+    background: "#2F96B4",
     color: "white",
     fontWeight: 700,
     cursor: "pointer",

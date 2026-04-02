@@ -1392,3 +1392,34 @@ def evaluator_notifications(request):
 def mark_evaluator_notifications_read(request):
     EvaluatorNotification.objects.filter(user=request.user, is_read=False).update(is_read=True)
     return Response({"detail": "Notifications marked as read."})
+class SMEDetailForScoringView(APIView):
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
+    def get(self, request, pk):
+        profile, err = _get_evaluator_profile_or_403(request)
+        if err:
+            return err
+
+        try:
+            sme = SME.objects.select_related("evaluator", "scored_by").get(
+                pk=pk,
+                bank=profile.bank,
+            )
+        except SME.DoesNotExist:
+            return Response(
+                {"detail": "SME not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
+        if block:
+            return block
+
+        return Response({
+            "id": sme.id,
+            "name": sme.name,
+            "br_number": sme.br_number,
+            "industry": sme.industry,
+            "is_scored": sme.is_scored,
+            "total_score": sme.total_score,
+        })

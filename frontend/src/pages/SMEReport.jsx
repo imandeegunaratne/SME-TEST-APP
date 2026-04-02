@@ -1,7 +1,19 @@
-// frontend/src/pages/SMEReport.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+
+const CRITERIA_NAMES = [
+  "Business opportunity gap",
+  "Customer pains and gains",
+  "Intrest to take risk",
+  "Stakeholder Engagement & Support",
+  "Competitive Position",
+  "Management & Workforce Capability",
+  "Streams of Revenue",
+  "Cost Control & Efficiency",
+  "Taking adavantage of state assistance",
+  "Operational Readiness",
+];
 
 export default function SMEReport() {
   const { id } = useParams();
@@ -19,6 +31,7 @@ export default function SMEReport() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -37,7 +50,14 @@ export default function SMEReport() {
           },
         });
 
-        const j = await res.json().catch(() => ({}));
+        const text = await res.text();
+        let j = {};
+
+        try {
+          j = text ? JSON.parse(text) : {};
+        } catch {
+          j = {};
+        }
 
         if (res.status === 401) {
           localStorage.removeItem("token");
@@ -46,7 +66,7 @@ export default function SMEReport() {
         }
 
         if (!res.ok) {
-          throw new Error(j.detail || "Failed to load report.");
+          throw new Error(j.detail || `Failed to load report. Status ${res.status}`);
         }
 
         setData(j);
@@ -60,52 +80,101 @@ export default function SMEReport() {
 
   function formatScore(value) {
     if (value === null || value === undefined || value === "") return "—";
-    return Number(value).toFixed(2);
+    const num = Number(value);
+    return Number.isNaN(num) ? "—" : num.toFixed(2);
+  }
+
+  function getCriterionCode(item, index) {
+    return item.code || item.criterion_code || `C${index + 1}`;
+  }
+
+  function getCriterionOrder(item, index) {
+    const code = getCriterionCode(item, index);
+    const match = String(code).match(/\d+/);
+    return match ? parseInt(match[0], 10) : 999;
+  }
+
+  function getCriterionTitle(item, index) {
+    const order = getCriterionOrder(item, index);
+
+    return (
+      CRITERIA_NAMES[order - 1] ||
+      item.label ||
+      item.name ||
+      item.title ||
+      item.criterion_name ||
+      `Criterion ${order}`
+    );
   }
 
   async function downloadPDF() {
-  try {
-    const res = await fetch(`/api/smes/${id}/report/pdf/`, {
-      headers: {
-        Authorization: `Token ${token}`,
-      },
-    });
-
-    if (res.status === 401) {
-      localStorage.removeItem("token");
+    if (!token) {
       navigate("/login", { replace: true });
       return;
     }
 
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      throw new Error(j.detail || "Failed to download PDF.");
+    try {
+      setDownloading(true);
+
+      const res = await fetch(`/api/smes/${id}/report/pdf/`, {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${token}`,
+        },
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      if (!res.ok) {
+        const text = await res.text();
+        let message = "Failed to download PDF.";
+
+        try {
+          const j = text ? JSON.parse(text) : {};
+          message = j.detail || message;
+        } catch {
+          if (text) message = text;
+        }
+
+        throw new Error(message);
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.toLowerCase().includes("pdf")) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Server did not return a PDF file.");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `SME_Report_${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e.message || "Failed to download PDF.");
+    } finally {
+      setDownloading(false);
     }
-
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `SME_Report_${id}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(url);
-  } catch (e) {
-    alert(e.message || "Failed to download PDF.");
   }
-}
 
   if (loading) {
     return (
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
         <Navbar
           theme={theme}
-          username={username}
           onLogoClick={() => navigate("/evaluator-home")}
           onDownloadPDF={downloadPDF}
+          downloading={downloading}
         />
         <div style={styles.wrapper}>
           <div style={styles.messageBox}>Loading report...</div>
@@ -119,9 +188,9 @@ export default function SMEReport() {
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
         <Navbar
           theme={theme}
-          username={username}
           onLogoClick={() => navigate("/evaluator-home")}
           onDownloadPDF={downloadPDF}
+          downloading={downloading}
         />
         <div style={styles.wrapper}>
           <div
@@ -138,9 +207,38 @@ export default function SMEReport() {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
+        <Navbar
+          theme={theme}
+          onLogoClick={() => navigate("/evaluator-home")}
+          onDownloadPDF={downloadPDF}
+          downloading={downloading}
+        />
+        <div style={styles.wrapper}>
+          <div
+            style={{
+              ...styles.messageBox,
+              background: theme.card,
+              border: `1px solid ${theme.border}`,
+            }}
+          >
+            No report data available.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const criteria = Array.isArray(data.criteria) ? data.criteria : [];
+  const criteria = Array.isArray(data.criteria) ? [...data.criteria] : [];
+
+  criteria.sort((a, b) => {
+    const aOrder = getCriterionOrder(a, 0);
+    const bOrder = getCriterionOrder(b, 0);
+    return aOrder - bOrder;
+  });
+
   const overallEvidence =
     data.additional_details ||
     data.evidence ||
@@ -152,9 +250,9 @@ export default function SMEReport() {
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
       <Navbar
         theme={theme}
-        username={username}
         onLogoClick={() => navigate("/evaluator-home")}
         onDownloadPDF={downloadPDF}
+        downloading={downloading}
       />
 
       <div style={styles.wrapper}>
@@ -223,18 +321,8 @@ export default function SMEReport() {
                     </tr>
                   ) : (
                     criteria.map((item, index) => {
-                      const code =
-                        item.code ||
-                        item.criterion_code ||
-                        item.criterion ||
-                        `C${index + 1}`;
-
-                      const title =
-                        item.label ||
-                        item.name ||
-                        item.title ||
-                        `Criterion ${index + 1}`;
-
+                      const code = getCriterionCode(item, index);
+                      const title = getCriterionTitle(item, index);
                       const score =
                         item.score ??
                         item.raw_score ??
@@ -269,7 +357,7 @@ export default function SMEReport() {
   );
 }
 
-function Navbar({ theme, username, onLogoClick, onDownloadPDF }) {
+function Navbar({ theme, onLogoClick, onDownloadPDF, downloading }) {
   return (
     <header
       style={{
@@ -293,25 +381,17 @@ function Navbar({ theme, username, onLogoClick, onDownloadPDF }) {
           <button
             type="button"
             onClick={onDownloadPDF}
+            disabled={downloading}
             style={{
               ...styles.downloadBtn,
               background: theme.button,
               color: "#FFFFFF",
+              opacity: downloading ? 0.7 : 1,
+              cursor: downloading ? "not-allowed" : "pointer",
             }}
           >
-            Download PDF
+            {downloading ? "Downloading..." : "Download PDF"}
           </button>
-
-          <div
-            style={{
-              ...styles.avatar,
-              background: theme.avatarBg,
-              color: theme.text,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
-            {(username || "U").charAt(0).toUpperCase()}
-          </div>
         </div>
       </div>
     </header>
@@ -327,7 +407,7 @@ const darkTheme = {
   muted: "rgba(255,255,255,0.72)",
   border: "rgba(255,255,255,0.10)",
   button: BRAND,
-  navBg: "#FFFFFF",
+  navBg: "#101828",
   avatarBg: "rgba(255,255,255,0.06)",
 };
 
@@ -402,17 +482,6 @@ const styles = {
     padding: "12px 18px",
     fontSize: 14,
     fontWeight: 700,
-    cursor: "pointer",
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 800,
-    fontSize: 28,
   },
   wrapper: {
     width: "min(1180px, 95%)",

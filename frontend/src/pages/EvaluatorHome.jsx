@@ -1,355 +1,330 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
-export default function BankAdminDashboard() {
+export default function EvaluatorHome() {
   const navigate = useNavigate();
+  const role = localStorage.getItem("role");
 
-  const [dark, setDark] = useState(() => {
+  const [themeMode] = useState(() => {
     const saved = localStorage.getItem("theme");
-    return saved ? saved === "dark" : true;
+    return saved === "light" ? "light" : "dark";
   });
 
-  const [activeTab, setActiveTab] = useState("approval");
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = useMemo(
+    () => (themeMode === "dark" ? darkTheme : lightTheme),
+    [themeMode]
+  );
 
-  const [pending, setPending] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [industryData, setIndustryData] = useState([]);
-  const [evaluatorData, setEvaluatorData] = useState(null);
-  const [criterionData, setCriterionData] = useState([]);
-  const [smes, setSmes] = useState([]);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [comparisonData, setComparisonData] = useState([]);
+  const [activeTab, setActiveTab] = useState("home");
 
-  const [selectedEvaluatorId, setSelectedEvaluatorId] = useState("");
-  const [selectedEvaluatorData, setSelectedEvaluatorData] = useState(null);
-  const [selectedEvaluatorLoading, setSelectedEvaluatorLoading] = useState(false);
-
-  const [selectedIndustry, setSelectedIndustry] = useState("");
-  const [selectedCriterion, setSelectedCriterion] = useState("");
+  const [summary, setSummary] = useState({
+    total_smes: 0,
+    scored_smes: 0,
+    pending_smes: 0,
+  });
 
   const [loading, setLoading] = useState(true);
-  const [analysisLoading, setAnalysisLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState(null);
-  const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+  const [err, setErr] = useState("");
 
-  // evaluator search + manage
-  const [searchEvaluator, setSearchEvaluator] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [homeSearch, setHomeSearch] = useState("");
+  const [homeFound, setHomeFound] = useState(null);
+  const [homeSearchMsg, setHomeSearchMsg] = useState("");
 
-  useEffect(() => {
-    localStorage.setItem("theme", dark ? "dark" : "light");
-  }, [dark]);
+  const [scoreSearch, setScoreSearch] = useState("");
+  const [scoreFound, setScoreFound] = useState(null);
+  const [scoreSearchMsg, setScoreSearchMsg] = useState("");
 
-  useEffect(() => {
-    fetchPending();
-    fetchAnalysisData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
-  useEffect(() => {
-    if (selectedIds.length >= 2) {
-      fetchComparison(selectedIds);
-    } else {
-      setComparisonData([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    if (selectedEvaluatorId) {
-      fetchEvaluatorDistribution(selectedEvaluatorId);
-    } else {
-      setSelectedEvaluatorData(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEvaluatorId]);
+  const profileRef = useRef(null);
+  const notifyRef = useRef(null);
 
-  async function apiGet(url) {
-    const token = localStorage.getItem("token");
+  const [passwordForm, setPasswordForm] = useState({
+    old_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState("");
 
-    const res = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${token}`,
-      },
-    });
+  const username = localStorage.getItem("username") || "Evaluator";
 
-    let data = null;
-    let text = "";
+  function authHeaders(extra = {}) {
+    const tokenNow = localStorage.getItem("token");
+    return {
+      Authorization: `Token ${tokenNow}`,
+      ...extra,
+    };
+  }
 
+  async function loadNotifications() {
     try {
-      data = await res.json();
-    } catch {
-      try {
-        text = await res.text();
-      } catch {
-        text = "";
+      const res = await fetch("/api/evaluator/notifications/", {
+        headers: authHeaders(),
+      });
+
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate("/login");
+        return;
       }
-    }
 
-    if (!res.ok) {
-      throw new Error(
-        data?.detail ||
-          data?.message ||
-          data?.error ||
-          text ||
-          `Request failed with status ${res.status}`
-      );
-    }
+      const data = await res.json().catch(() => []);
+      const items = Array.isArray(data) ? data : [];
 
-    return data;
+      setNotifications(items);
+      setUnreadCount(items.filter((n) => !n.is_read).length);
+    } catch (e) {
+      console.error("Failed to load notifications:", e);
+    }
   }
 
-  async function apiPost(url, body = {}) {
-    const token = localStorage.getItem("token");
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Token ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      throw new Error(
-        data?.detail ||
-          data?.message ||
-          data?.error ||
-          `Request failed with status ${res.status}`
-      );
-    }
-
-    return data;
-  }
-
-  async function fetchPending() {
+  async function markNotificationsAsRead() {
     try {
-      setError("");
-      setLoading(true);
-      const data = await apiGet("/api/bank-admin/pending-evaluators/");
-      setPending(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message || "Something went wrong.");
+      await fetch("/api/evaluator/notifications/mark-read/", {
+        method: "POST",
+        headers: authHeaders({
+          "Content-Type": "application/json",
+        }),
+      });
+
+      setNotifications((prev) =>
+        prev.map((item) => ({ ...item, is_read: true }))
+      );
+      setUnreadCount(0);
+    } catch (e) {
+      console.error("Failed to mark notifications as read:", e);
+    }
+  }
+
+  async function loadData() {
+    setLoading(true);
+    setErr("");
+
+    const tokenNow = localStorage.getItem("token");
+
+    if (!tokenNow) {
+      setErr("You are not logged in.");
+      setLoading(false);
+      navigate("/login");
+      return;
+    }
+
+    if (role === "BANK_ADMIN") {
+      navigate("/bank-admin-dashboard");
+      return;
+    }
+
+    try {
+      const s1 = await fetch("/api/evaluator/summary/", {
+        headers: authHeaders(),
+      });
+
+      const sum = await s1.json().catch(() => ({}));
+      if (!s1.ok) {
+        throw new Error(sum.detail || "Failed to load summary.");
+      }
+
+      setSummary({
+        total_smes: sum.total_smes || 0,
+        scored_smes: sum.scored_smes || 0,
+        pending_smes: sum.pending_smes || 0,
+      });
+
+      await loadNotifications();
+    } catch (e) {
+      setErr(e.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchAnalysisData() {
-    try {
-      setError("");
-      setAnalysisLoading(true);
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      const [summaryRes, industryRes, evaluatorRes, criterionRes, smeRes] =
-        await Promise.all([
-          apiGet("/api/bank-admin/dashboard-summary/"),
-          apiGet("/api/bank-admin/industry-analysis/"),
-          apiGet("/api/bank-admin/evaluator-analysis/"),
-          apiGet("/api/bank-admin/criterion-analysis/"),
-          apiGet("/api/bank-admin/smes/"),
-        ]);
-
-      setSummary(summaryRes || null);
-      setIndustryData(Array.isArray(industryRes) ? industryRes : []);
-      setEvaluatorData(evaluatorRes || null);
-      setCriterionData(Array.isArray(criterionRes) ? criterionRes : []);
-      setSmes(Array.isArray(smeRes) ? smeRes : []);
-    } catch (err) {
-      setError(err.message || "Failed to load analysis.");
-    } finally {
-      setAnalysisLoading(false);
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setShowProfileMenu(false);
+      }
+      if (notifyRef.current && !notifyRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
     }
-  }
 
-  async function fetchComparison(ids) {
-    try {
-      setError("");
-      const query = ids.join(",");
-      const data = await apiGet(`/api/bank-admin/sme-comparison/?ids=${query}`);
-      setComparisonData(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message || "Failed to load comparison.");
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function searchHomeByBR() {
+    setHomeSearchMsg("");
+    setHomeFound(null);
+
+    const tokenNow = localStorage.getItem("token");
+    if (!tokenNow) {
+      setHomeSearchMsg("You are not logged in.");
+      navigate("/login");
+      return;
     }
-  }
 
-  async function fetchEvaluatorDistribution(evaluatorId) {
+    if (!homeSearch.trim()) {
+      setHomeSearchMsg("Please enter a BR number.");
+      return;
+    }
+
     try {
-      setError("");
-      setSelectedEvaluatorLoading(true);
-
-      const data = await apiGet(
-        `/api/bank-admin/evaluator-score-distribution/${evaluatorId}/`
+      const res = await fetch(
+        `/api/smes/report-by-br/?br=${encodeURIComponent(homeSearch.trim())}`,
+        { headers: authHeaders() }
       );
 
-      setSelectedEvaluatorData(data || null);
-    } catch (err) {
-      setError(err.message || "Failed to load evaluator distribution.");
-      setSelectedEvaluatorData(null);
-    } finally {
-      setSelectedEvaluatorLoading(false);
-    }
-  }
-
-  async function approve(profileId) {
-    try {
-      setError("");
-      setSuccessMsg("");
-      setActionLoadingId(profileId);
-
-      await apiPost(`/api/bank-admin/approve-evaluator/${profileId}/`);
-
-      setSuccessMsg("Evaluator approved successfully.");
-      fetchPending();
-      fetchAnalysisData();
-      if (searchEvaluator.trim()) {
-        handleSearchEvaluator();
-      }
-    } catch (err) {
-      setError(err.message || "Approval error.");
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function disapprove(profileId) {
-    try {
-      setError("");
-      setSuccessMsg("");
-      setActionLoadingId(profileId);
-
-      await apiPost(`/api/bank-admin/disapprove-evaluator/${profileId}/`);
-
-      setSuccessMsg("Evaluator disapproved and blocked successfully.");
-      fetchPending();
-      fetchAnalysisData();
-      if (searchEvaluator.trim()) {
-        handleSearchEvaluator();
-      }
-    } catch (err) {
-      setError(err.message || "Disapproval error.");
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function blockEvaluator(profileId) {
-    try {
-      setError("");
-      setSuccessMsg("");
-      setActionLoadingId(profileId);
-
-      await apiPost(`/api/bank-admin/block-evaluator/${profileId}/`);
-
-      setSuccessMsg("Evaluator blocked successfully.");
-      fetchPending();
-      fetchAnalysisData();
-      handleSearchEvaluator();
-    } catch (err) {
-      setError(err.message || "Block failed.");
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function unblockEvaluator(profileId) {
-    try {
-      setError("");
-      setSuccessMsg("");
-      setActionLoadingId(profileId);
-
-      await apiPost(`/api/bank-admin/unblock-evaluator/${profileId}/`);
-
-      setSuccessMsg("Evaluator unblocked successfully.");
-      fetchPending();
-      fetchAnalysisData();
-      handleSearchEvaluator();
-    } catch (err) {
-      setError(err.message || "Unblock failed.");
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function handleSearchEvaluator() {
-    try {
-      setError("");
-      setSuccessMsg("");
-      setSearchLoading(true);
-
-      if (!searchEvaluator.trim()) {
-        setSearchResults([]);
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate("/login");
         return;
       }
 
-      const data = await apiGet(
-        `/api/bank-admin/search-evaluators/?q=${encodeURIComponent(
-          searchEvaluator.trim()
-        )}`
-      );
+      const data = await res.json().catch(() => ({}));
 
-      setSearchResults(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message || "Search failed.");
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
+      if (!res.ok) {
+        setHomeSearchMsg(
+          data.detail ||
+            "Scoring has not been done. Please go to the Scoring part and start scoring."
+        );
+        return;
+      }
+
+      setHomeFound(data);
+      setHomeSearchMsg("Completed SME report found.");
+    } catch (e) {
+      setHomeSearchMsg(e.message || "Search failed.");
     }
   }
 
-  function toggleSme(id) {
-    setSelectedIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev;
-      return [...prev, id];
-    });
+  async function searchScoreByBR() {
+    setScoreSearchMsg("");
+    setScoreFound(null);
+
+    const tokenNow = localStorage.getItem("token");
+    if (!tokenNow) {
+      setScoreSearchMsg("You are not logged in.");
+      navigate("/login");
+      return;
+    }
+
+    if (!scoreSearch.trim()) {
+      setScoreSearchMsg("Please enter a BR number.");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/smes/scoring-by-br/?br=${encodeURIComponent(scoreSearch.trim())}`,
+        { headers: authHeaders() }
+      );
+
+      if (res.status === 401) {
+        localStorage.clear();
+        navigate("/login");
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setScoreSearchMsg(data.detail || "Search failed.");
+        return;
+      }
+
+      setScoreFound(data);
+      setScoreSearchMsg("SME found. You can continue scoring.");
+    } catch (e) {
+      setScoreSearchMsg(e.message || "Search failed.");
+    }
   }
 
-  function logout() {
+  function handleLogout() {
     localStorage.clear();
     navigate("/");
   }
 
-  function getBarHeight(value, max = 10) {
-    const score = Number(value || 0);
-    const top = Number(max || 10);
-    if (top <= 0) return "6%";
-    return `${Math.max((score / top) * 100, 6)}%`;
+  function openPasswordModal() {
+    setShowProfileMenu(false);
+    setPasswordMsg("");
+    setShowPasswordModal(true);
+    setPasswordForm({
+      old_password: "",
+      new_password: "",
+      confirm_password: "",
+    });
   }
 
-  const selectedIndustryData = useMemo(() => {
-    return industryData.find((item) => item.industry === selectedIndustry) || null;
-  }, [industryData, selectedIndustry]);
+  function handlePasswordInput(e) {
+    const { name, value } = e.target;
+    setPasswordForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
 
-  const selectedCriterionData = useMemo(() => {
-    return (
-      criterionData.find((item) => item.criterion_code === selectedCriterion) ||
-      null
-    );
-  }, [criterionData, selectedCriterion]);
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPasswordMsg("");
 
-  const industryMaxScore = useMemo(() => {
-    if (!selectedIndustryData?.smes?.length) return 10;
-    const max = Math.max(
-      ...selectedIndustryData.smes.map((s) => Number(s.total_score || 0))
-    );
-    return max || 10;
-  }, [selectedIndustryData]);
+    if (
+      !passwordForm.old_password ||
+      !passwordForm.new_password ||
+      !passwordForm.confirm_password
+    ) {
+      setPasswordMsg("Please fill all password fields.");
+      return;
+    }
 
-  const criterionMaxScore = useMemo(() => {
-    if (!selectedCriterionData?.scores?.length) return 10;
-    const max = Math.max(
-      ...selectedCriterionData.scores.map((s) => Number(s.score || 0))
-    );
-    return max || 10;
-  }, [selectedCriterionData]);
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordMsg("New password and confirm password do not match.");
+      return;
+    }
+
+    setPasswordSaving(true);
+
+    try {
+      const res = await fetch("/api/change-password/", {
+        method: "POST",
+        headers: authHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          old_password: passwordForm.old_password,
+          new_password: passwordForm.new_password,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to change password.");
+      }
+
+      setPasswordMsg("Password changed successfully.");
+
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        localStorage.clear();
+        navigate("/login");
+      }, 1200);
+    } catch (e) {
+      setPasswordMsg(e.message || "Failed to change password.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
@@ -360,29 +335,27 @@ export default function BankAdminDashboard() {
           borderBottom: `1px solid ${theme.border}`,
         }}
       >
-        <div
-          style={styles.brand}
-          onClick={() => navigate("/bank-admin-dashboard")}
-        >
+        <div style={styles.brand} onClick={() => navigate("/evaluator-home")}>
           <img src={logo} alt="SME logo" style={styles.logoImg} />
           <div style={styles.brandTextWrap}>
             <div style={{ ...styles.brandTitle, color: theme.text }}>
               SME Scoring
             </div>
             <div style={{ ...styles.brandSub, color: theme.subText }}>
-              Bank Admin Workspace
+              Evaluator Workspace
             </div>
           </div>
         </div>
 
         <div style={styles.tabWrap}>
-          {["approval", "analysis"].map((tab) => (
+          {["home", "scoring"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
                 ...styles.tabBtn,
-                background: activeTab === tab ? theme.tabActiveBg : "transparent",
+                background:
+                  activeTab === tab ? theme.tabActiveBg : "transparent",
                 color: activeTab === tab ? theme.button : theme.text,
                 border:
                   activeTab === tab
@@ -396,1213 +369,1130 @@ export default function BankAdminDashboard() {
         </div>
 
         <div style={styles.rightWrap}>
-          <button
-            onClick={() => setDark(!dark)}
-            style={{
-              ...styles.iconBtn,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-            }}
-          >
-            {dark ? "Light" : "Dark"}
-          </button>
+          <div style={styles.popupWrap} ref={notifyRef}>
+            <button
+              onClick={() => {
+                const next = !showNotifications;
+                setShowNotifications(next);
+                if (next && unreadCount > 0) {
+                  markNotificationsAsRead();
+                }
+              }}
+              style={{
+                ...styles.iconBtn,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+              }}
+            >
+              🔔
+              {unreadCount > 0 && (
+                <span style={styles.badge}>{unreadCount}</span>
+              )}
+            </button>
 
-          <button
-            onClick={logout}
-            style={{
-              ...styles.iconBtn,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-            }}
-          >
-            Logout
-          </button>
+            {showNotifications && (
+              <div
+                style={{
+                  ...styles.dropdown,
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
+                }}
+              >
+                <div style={styles.dropdownHead}>Notifications</div>
+
+                {notifications.length === 0 ? (
+                  <div style={{ ...styles.dropdownText, color: theme.subText }}>
+                    No notifications yet.
+                  </div>
+                ) : (
+                  notifications.map((item, i) => (
+                    <div
+                      key={item.id || i}
+                      style={{
+                        ...styles.notificationItem,
+                        borderBottom:
+                          i !== notifications.length - 1
+                            ? `1px solid ${theme.border}`
+                            : "none",
+                        background: item.is_read
+                          ? "transparent"
+                          : theme.unreadBg,
+                      }}
+                    >
+                      <div style={styles.notificationTitle}>
+                        {item.title || "Notification"}
+                      </div>
+                      <div
+                        style={{
+                          ...styles.notificationText,
+                          color: theme.subText,
+                        }}
+                      >
+                        {item.message}
+                      </div>
+                      <div
+                        style={{
+                          ...styles.notificationTime,
+                          color: theme.subText,
+                        }}
+                      >
+                        {item.created_at}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={styles.popupWrap} ref={profileRef}>
+            <button
+              onClick={() => setShowProfileMenu((v) => !v)}
+              style={{
+                ...styles.profileBtn,
+                background: theme.button,
+                color: "#fff",
+              }}
+            >
+              {username[0]?.toUpperCase() || "U"}
+            </button>
+
+            {showProfileMenu && (
+              <div
+                style={{
+                  ...styles.dropdown,
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
+                  minWidth: 220,
+                }}
+              >
+                <div
+                  style={{
+                    ...styles.profileHeader,
+                    borderBottom: `1px solid ${theme.border}`,
+                  }}
+                >
+                  <div style={styles.profileName}>{username}</div>
+                  <div style={{ ...styles.profileRole, color: theme.subText }}>
+                    Evaluator
+                  </div>
+                </div>
+
+                <button
+                  style={{ ...styles.dropdownItem, color: theme.text }}
+                  onClick={openPasswordModal}
+                >
+                  Change Password
+                </button>
+                <button
+                  style={{ ...styles.dropdownItem, color: "#dc2626" }}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       <main style={styles.main}>
-        {error && (
+        {err && (
           <div
             style={{
-              ...styles.messageBox,
-              background: "rgba(239,68,68,0.12)",
-              border: "1px solid rgba(239,68,68,0.35)",
-              color: "#ef4444",
+              ...styles.alert,
+              background: theme.errorBg,
+              color: theme.errorText,
+              border: `1px solid ${theme.errorBorder}`,
             }}
           >
-            {error}
+            {err}
           </div>
         )}
 
-        {successMsg && (
-          <div
-            style={{
-              ...styles.messageBox,
-              background: "rgba(34,197,94,0.12)",
-              border: "1px solid rgba(34,197,94,0.35)",
-              color: "#22c55e",
-            }}
-          >
-            {successMsg}
-          </div>
-        )}
-
-        {activeTab === "approval" && (
-          <section>
-            <div style={styles.sectionHeader}>
+        {activeTab === "home" && (
+          <>
+            <section style={styles.heroSection}>
               <div>
-                <h2 style={{ margin: 0 }}>Evaluator Approval & Access Control</h2>
-                <p style={{ marginTop: 8, color: theme.subText }}>
-                  Approve, disapprove, search, and block evaluators from system access.
+                <h1 style={styles.heroTitle}>Welcome back, {username}</h1>
+              </div>
+            </section>
+
+            <section style={styles.sectionBlock}>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Overview</h2>
+                <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                  Quick insight into your SME evaluation activity
                 </p>
               </div>
-            </div>
 
-            <div
+              {loading ? (
+                <div style={{ color: theme.subText }}>Loading summary...</div>
+              ) : (
+                <div style={styles.statsGrid}>
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      background: theme.card,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.statTopBar,
+                        background: theme.accent1,
+                      }}
+                    />
+                    <div style={styles.statMetaRow}>
+                      <span
+                        style={{
+                          ...styles.statBadge,
+                          background: theme.softAccent1,
+                          color: theme.accent1,
+                        }}
+                      >
+                        Overview
+                      </span>
+                    </div>
+                    <div style={styles.statLabel}>Total SMEs</div>
+                    <div style={styles.statValue}>{summary.total_smes}</div>
+                  </div>
+
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      background: theme.card,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.statTopBar,
+                        background: theme.accent2,
+                      }}
+                    />
+                    <div style={styles.statMetaRow}>
+                      <span
+                        style={{
+                          ...styles.statBadge,
+                          background: theme.softAccent2,
+                          color: theme.accent2,
+                        }}
+                      >
+                        Completed
+                      </span>
+                    </div>
+                    <div style={styles.statLabel}>Scored SMEs</div>
+                    <div style={styles.statValue}>{summary.scored_smes}</div>
+                  </div>
+
+                  <div
+                    style={{
+                      ...styles.statCard,
+                      background: theme.card,
+                      border: `1px solid ${theme.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.statTopBar,
+                        background: theme.accent3,
+                      }}
+                    />
+                    <div style={styles.statMetaRow}>
+                      <span
+                        style={{
+                          ...styles.statBadge,
+                          background: theme.softAccent3,
+                          color: theme.accent3,
+                        }}
+                      >
+                        Pending
+                      </span>
+                    </div>
+                    <div style={styles.statLabel}>Pending SMEs</div>
+                    <div style={styles.statValue}>{summary.pending_smes}</div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section
               style={{
-                ...styles.panel,
+                ...styles.searchCard,
                 background: theme.card,
                 border: `1px solid ${theme.border}`,
-                marginBottom: 24,
               }}
             >
-              <div style={styles.panelHead}>
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>Search SME Report</h2>
+                <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                  Search an SME using the BR number and view the completed report
+                </p>
+              </div>
+
+              <div style={styles.searchRow}>
+                <input
+                  value={homeSearch}
+                  onChange={(e) => setHomeSearch(e.target.value)}
+                  placeholder="Enter BR number"
+                  style={{
+                    ...styles.search,
+                    background: theme.inputBg,
+                    color: theme.text,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                />
+
+                <button
+                  style={{
+                    ...styles.searchBtn,
+                    background: theme.button,
+                  }}
+                  onClick={searchHomeByBR}
+                >
+                  Search
+                </button>
+              </div>
+
+              {homeSearchMsg && (
+                <div style={{ ...styles.inlineMessage, color: theme.subText }}>
+                  {homeSearchMsg}
+                </div>
+              )}
+
+              {homeFound && (
+                <div
+                  style={{
+                    ...styles.resultCard,
+                    background: theme.resultBg,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  <div style={styles.resultLeft}>
+                    <div style={styles.resultTopRow}>
+                      <div style={styles.resultTitle}>{homeFound.name}</div>
+                      <span
+                        style={{
+                          ...styles.resultPill,
+                          background: theme.softAccent1,
+                          color: theme.accent1,
+                        }}
+                      >
+                        Report Ready
+                      </span>
+                    </div>
+                    <div style={{ ...styles.resultSub, color: theme.subText }}>
+                      BR Number: {homeFound.br_number}
+                    </div>
+                  </div>
+
+                  <div style={styles.actionWrap}>
+                    <button
+                      style={{
+                        ...styles.smallPrimaryBtn,
+                        background: theme.button,
+                      }}
+                      onClick={() => navigate(`/smes/${homeFound.id}/report`)}
+                    >
+                      View Report
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {activeTab === "scoring" && (
+          <div style={styles.scoringGrid}>
+            <section
+              style={{
+                ...styles.panelCard,
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+              }}
+            >
+              <div style={styles.panelHeaderLine}>
                 <div>
-                  <h3 style={{ margin: 0 }}>Pending Evaluator Accounts</h3>
-                  <p style={{ ...styles.panelSub, color: theme.subText }}>
-                    Approve new evaluator registrations or disapprove them to block access.
+                  <h2 style={styles.sectionTitle}>Register SME</h2>
+                  <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                    Add a new SME before starting the scoring process
                   </p>
                 </div>
               </div>
 
-              {loading && <p>Loading...</p>}
+              <button
+                style={{ ...styles.primaryBtn, background: theme.button }}
+                onClick={() => navigate("/sme-register")}
+              >
+                Register New SME
+              </button>
+            </section>
 
-              {!loading && pending.length === 0 && (
-                <div
-                  style={{
-                    ...styles.emptyCard,
-                    background: theme.bg,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.subText,
-                  }}
-                >
-                  No pending approvals.
-                </div>
-              )}
-
-              <div style={styles.cardGrid}>
-                {pending.map((p) => {
-                  const profileId = p.id || p.profile_id;
-
-                  return (
-                    <div
-                      key={profileId}
-                      style={{
-                        ...styles.card,
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
-                      }}
-                    >
-                      <div style={styles.cardTop}>
-                        <div>
-                          <h3 style={{ margin: 0, color: theme.text }}>{p.username}</h3>
-                          <p style={{ margin: "8px 0 6px", color: theme.subText }}>
-                            Evaluator account waiting for approval
-                          </p>
-                          {p.bank_name && (
-                            <p style={{ margin: 0, color: theme.subText, fontSize: 13 }}>
-                              Bank: {p.bank_name}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div style={styles.actionRow}>
-                        <button
-                          onClick={() => approve(profileId)}
-                          disabled={actionLoadingId === profileId}
-                          style={styles.approveBtn}
-                        >
-                          {actionLoadingId === profileId ? "Please wait..." : "Approve"}
-                        </button>
-
-                        <button
-                          onClick={() => disapprove(profileId)}
-                          disabled={actionLoadingId === profileId}
-                          style={styles.disapproveBtn}
-                        >
-                          {actionLoadingId === profileId
-                            ? "Please wait..."
-                            : "Disapprove"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div
+            <section
               style={{
-                ...styles.panel,
+                ...styles.panelCard,
                 background: theme.card,
                 border: `1px solid ${theme.border}`,
               }}
             >
-              <div style={styles.panelHead}>
+              <div style={styles.panelHeaderLine}>
                 <div>
-                  <h3 style={{ margin: 0 }}>Search and Manage Evaluators</h3>
-                  <p style={{ ...styles.panelSub, color: theme.subText }}>
-                    Search for any evaluator and block or unblock access to the system.
+                  <h2 style={styles.sectionTitle}>Search & Start Scoring</h2>
+                  <p style={{ ...styles.sectionSub, color: theme.subText }}>
+                    Search an SME by BR number and continue scoring
                   </p>
                 </div>
               </div>
 
               <div style={styles.searchRow}>
                 <input
-                  type="text"
-                  value={searchEvaluator}
-                  onChange={(e) => setSearchEvaluator(e.target.value)}
-                  placeholder="Search by evaluator username"
+                  value={scoreSearch}
+                  onChange={(e) => setScoreSearch(e.target.value)}
+                  placeholder="Enter BR number"
                   style={{
-                    ...styles.searchInput,
-                    background: theme.bg,
-                    border: `1px solid ${theme.border}`,
+                    ...styles.search,
+                    background: theme.inputBg,
                     color: theme.text,
+                    border: `1px solid ${theme.border}`,
                   }}
                 />
 
-                <button onClick={handleSearchEvaluator} style={styles.searchBtn}>
+                <button
+                  style={{
+                    ...styles.searchBtn,
+                    background: theme.button,
+                  }}
+                  onClick={searchScoreByBR}
+                >
                   Search
                 </button>
               </div>
 
-              {searchLoading && (
-                <p style={{ color: theme.subText, marginTop: 16 }}>
-                  Searching evaluators...
-                </p>
-              )}
-
-              {!searchLoading && searchEvaluator.trim() && searchResults.length === 0 && (
-                <div
-                  style={{
-                    ...styles.emptyCard,
-                    marginTop: 16,
-                    background: theme.bg,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.subText,
-                  }}
-                >
-                  No evaluators found.
+              {scoreSearchMsg && (
+                <div style={{ ...styles.inlineMessage, color: theme.subText }}>
+                  {scoreSearchMsg}
                 </div>
               )}
 
-              {searchResults.length > 0 && (
-                <div style={styles.cardGrid}>
-                  {searchResults.map((ev) => (
-                    <div
-                      key={ev.profile_id}
-                      style={{
-                        ...styles.card,
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
-                      }}
-                    >
-                      <h3 style={{ marginTop: 0, marginBottom: 8 }}>{ev.username}</h3>
-
-                      <div style={{ color: theme.subText, marginBottom: 6 }}>
-                        Role: Evaluator
-                      </div>
-                      <div style={{ color: theme.subText, marginBottom: 6 }}>
-                        Approval: {ev.is_approved ? "Approved" : "Not Approved"}
-                      </div>
-                      <div style={{ color: theme.subText, marginBottom: 14 }}>
-                        Status: {ev.is_active ? "Active" : "Blocked"}
-                      </div>
-
-                      <div style={styles.actionRow}>
-                        {ev.is_active ? (
-                          <button
-                            onClick={() => blockEvaluator(ev.profile_id)}
-                            disabled={actionLoadingId === ev.profile_id}
-                            style={styles.blockBtn}
-                          >
-                            {actionLoadingId === ev.profile_id
-                              ? "Please wait..."
-                              : "Block"}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => unblockEvaluator(ev.profile_id)}
-                            disabled={actionLoadingId === ev.profile_id}
-                            style={styles.unblockBtn}
-                          >
-                            {actionLoadingId === ev.profile_id
-                              ? "Please wait..."
-                              : "Unblock"}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "analysis" && (
-          <section>
-            <div style={styles.sectionHeader}>
-              <div>
-                <h2 style={{ margin: 0 }}>Dashboard Analysis</h2>
-                <p style={{ marginTop: 8, color: theme.subText }}>
-                  Evaluator and SME analysis for this bank.
-                </p>
-              </div>
-            </div>
-
-            {analysisLoading && <p>Loading analysis...</p>}
-
-            {!analysisLoading && (
-              <>
+              {scoreFound && (
                 <div
                   style={{
-                    ...styles.panel,
-                    background: theme.card,
+                    ...styles.scoreResultCard,
+                    background: theme.resultBg,
                     border: `1px solid ${theme.border}`,
-                    marginBottom: 24,
                   }}
                 >
-                  <div style={styles.panelHead}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>Evaluator Analysis</h3>
-                      <p style={{ ...styles.panelSub, color: theme.subText }}>
-                        Evaluator counts, selected evaluator distribution, and total evaluations
-                      </p>
-                    </div>
-                  </div>
-
-                  {!evaluatorData ? (
-                    <p style={{ color: theme.subText }}>
-                      No evaluator analysis available.
-                    </p>
-                  ) : (
-                    <>
-                      <div style={styles.innerStatsGrid}>
-                        <div
-                          style={{
-                            ...styles.innerStatCard,
-                            background: theme.bg,
-                            border: `1px solid ${theme.border}`,
-                          }}
-                        >
-                          <div style={styles.innerStatLabel}>Approved</div>
-                          <div style={styles.innerStatValue}>
-                            {evaluatorData.approved_evaluators || 0}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            ...styles.innerStatCard,
-                            background: theme.bg,
-                            border: `1px solid ${theme.border}`,
-                          }}
-                        >
-                          <div style={styles.innerStatLabel}>Pending</div>
-                          <div style={styles.innerStatValue}>
-                            {evaluatorData.pending_evaluators || 0}
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            ...styles.innerStatCard,
-                            background: theme.bg,
-                            border: `1px solid ${theme.border}`,
-                          }}
-                        >
-                          <div style={styles.innerStatLabel}>Total</div>
-                          <div style={styles.innerStatValue}>
-                            {evaluatorData.total_evaluators || 0}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
+                  <div style={styles.scoreResultMain}>
+                    <div style={styles.scoreResultTop}>
+                      <div style={styles.resultTitle}>{scoreFound.name}</div>
+                      <span
                         style={{
-                          ...styles.subPanel,
-                          background: theme.bg,
-                          border: `1px solid ${theme.border}`,
-                          marginTop: 20,
+                          ...styles.resultPill,
+                          background: theme.softAccent2,
+                          color: theme.accent2,
                         }}
                       >
-                        <h4 style={{ marginTop: 0, marginBottom: 14 }}>
-                          Select Evaluator
-                        </h4>
+                        Ready for Scoring
+                      </span>
+                    </div>
 
-                        <select
-                          value={selectedEvaluatorId}
-                          onChange={(e) => setSelectedEvaluatorId(e.target.value)}
-                          style={{
-                            ...styles.selectInput,
-                            background: theme.card,
-                            border: `1px solid ${theme.border}`,
-                            color: theme.text,
-                          }}
-                        >
-                          <option value="">Choose evaluator</option>
-                          {(evaluatorData.evaluators || []).map((ev) => (
-                            <option key={ev.evaluator_id} value={ev.evaluator_id}>
-                              {ev.username}
-                            </option>
-                          ))}
-                        </select>
-
-                        {!selectedEvaluatorId && (
-                          <div style={{ marginTop: 18, color: theme.subText }}>
-                            Select an evaluator to display the score distribution chart.
-                          </div>
-                        )}
-
-                        {selectedEvaluatorLoading && (
-                          <p style={{ color: theme.subText, marginTop: 16 }}>
-                            Loading evaluator details...
-                          </p>
-                        )}
-
-                        {selectedEvaluatorData && !selectedEvaluatorLoading && (
-                          <div style={{ marginTop: 18 }}>
-                            <div style={styles.selectedEvalGrid}>
-                              <div
-                                style={{
-                                  ...styles.selectedEvalCard,
-                                  background: theme.card,
-                                  border: `1px solid ${theme.border}`,
-                                }}
-                              >
-                                <div style={styles.selectedEvalLabel}>Evaluator</div>
-                                <div style={styles.selectedEvalValueSmall}>
-                                  {selectedEvaluatorData.username}
-                                </div>
-                              </div>
-
-                              <div
-                                style={{
-                                  ...styles.selectedEvalCard,
-                                  background: theme.card,
-                                  border: `1px solid ${theme.border}`,
-                                }}
-                              >
-                                <div style={styles.selectedEvalLabel}>Average</div>
-                                <div style={styles.selectedEvalValue}>
-                                  {selectedEvaluatorData.average_score}
-                                </div>
-                              </div>
-
-                              <div
-                                style={{
-                                  ...styles.selectedEvalCard,
-                                  background: theme.card,
-                                  border: `1px solid ${theme.border}`,
-                                }}
-                              >
-                                <div style={styles.selectedEvalLabel}>Highest</div>
-                                <div style={styles.selectedEvalValue}>
-                                  {selectedEvaluatorData.highest_score}
-                                </div>
-                              </div>
-
-                              <div
-                                style={{
-                                  ...styles.selectedEvalCard,
-                                  background: theme.card,
-                                  border: `1px solid ${theme.border}`,
-                                }}
-                              >
-                                <div style={styles.selectedEvalLabel}>Lowest</div>
-                                <div style={styles.selectedEvalValue}>
-                                  {selectedEvaluatorData.lowest_score}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                ...styles.subPanel,
-                                background: theme.card,
-                                border: `1px solid ${theme.border}`,
-                                marginTop: 18,
-                              }}
-                            >
-                              <h4 style={{ marginTop: 0, marginBottom: 14 }}>
-                                Evaluator Score Distribution
-                              </h4>
-
-                              {!Array.isArray(selectedEvaluatorData.smes) ||
-                              selectedEvaluatorData.smes.length === 0 ? (
-                                <p style={{ color: theme.subText }}>
-                                  No SME scoring records found for this evaluator.
-                                </p>
-                              ) : (
-                                <>
-                                  <div style={styles.chartWrap}>
-                                    {selectedEvaluatorData.smes.map((sme) => (
-                                      <div key={sme.sme_id} style={styles.chartCol}>
-                                        <div
-                                          style={{
-                                            color: theme.text,
-                                            fontSize: 12,
-                                            fontWeight: 700,
-                                          }}
-                                        >
-                                          {sme.total_score}
-                                        </div>
-
-                                        <div
-                                          style={{
-                                            ...styles.chartBarArea,
-                                            background: dark
-                                              ? "rgba(255,255,255,0.05)"
-                                              : "rgba(11,18,32,0.05)",
-                                            border: `1px solid ${theme.border}`,
-                                          }}
-                                        >
-                                          <div
-                                            style={{
-                                              ...styles.chartBar,
-                                              height: getBarHeight(sme.total_score),
-                                              background: theme.button,
-                                            }}
-                                          />
-                                        </div>
-
-                                        <div
-                                          style={{
-                                            ...styles.chartLabel,
-                                            color: theme.subText,
-                                          }}
-                                          title={`${sme.sme_name} (${sme.br_number})`}
-                                        >
-                                          {sme.br_number}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-
-                                  <div
-                                    style={{
-                                      ...styles.evaluationCountCard,
-                                      background: theme.bg,
-                                      border: `1px solid ${theme.border}`,
-                                      color: theme.text,
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        fontSize: 13,
-                                        color: theme.subText,
-                                        marginBottom: 6,
-                                      }}
-                                    >
-                                      Number of evaluations done by this evaluator
-                                    </div>
-                                    <div
-                                      style={{
-                                        fontSize: 28,
-                                        fontWeight: 800,
-                                      }}
-                                    >
-                                      {selectedEvaluatorData.total_scored}
-                                    </div>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    ...styles.panel,
-                    background: theme.card,
-                    border: `1px solid ${theme.border}`,
-                    marginBottom: 24,
-                  }}
-                >
-                  <div style={styles.panelHead}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>SME Analysis</h3>
-                      <p style={{ ...styles.panelSub, color: theme.subText }}>
-                        Industry, criterion, and SME comparison insights
-                      </p>
+                    <div style={{ ...styles.resultSub, color: theme.subText }}>
+                      BR Number: {scoreFound.br_number}
                     </div>
                   </div>
 
-                  <div style={styles.innerStatsGrid}>
-                    <div
+                  <div style={styles.actionWrap}>
+                    <button
                       style={{
-                        ...styles.innerStatCard,
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
+                        ...styles.smallPrimaryBtn,
+                        background: theme.button,
                       }}
+                      onClick={() => navigate(`/smes/${scoreFound.id}/score`)}
                     >
-                      <div style={styles.innerStatLabel}>Total SMEs</div>
-                      <div style={styles.innerStatValue}>
-                        {summary?.total_smes || 0}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        ...styles.innerStatCard,
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
-                      }}
-                    >
-                      <div style={styles.innerStatLabel}>Scored SMEs</div>
-                      <div style={styles.innerStatValue}>
-                        {summary?.scored_smes || 0}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        ...styles.innerStatCard,
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
-                      }}
-                    >
-                      <div style={styles.innerStatLabel}>Pending SMEs</div>
-                      <div style={styles.innerStatValue}>
-                        {summary?.pending_smes || 0}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={styles.analysisGrid}>
-                    <div
-                      style={{
-                        ...styles.subPanel,
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
-                        marginTop: 20,
-                      }}
-                    >
-                      <h4 style={{ marginTop: 0, marginBottom: 14 }}>Industry Analysis</h4>
-
-                      <select
-                        value={selectedIndustry}
-                        onChange={(e) => setSelectedIndustry(e.target.value)}
-                        style={{
-                          ...styles.selectInput,
-                          background: theme.card,
-                          border: `1px solid ${theme.border}`,
-                          color: theme.text,
-                          marginBottom: 16,
-                        }}
-                      >
-                        <option value="">Choose industry</option>
-                        {industryData.map((row, index) => (
-                          <option key={`${row.industry}-${index}`} value={row.industry}>
-                            {row.industry}
-                          </option>
-                        ))}
-                      </select>
-
-                      {!selectedIndustryData ? (
-                        <p style={{ color: theme.subText }}>
-                          Select an industry to view score distribution and statistics.
-                        </p>
-                      ) : (
-                        <>
-                          <div style={styles.selectedEvalGrid}>
-                            <div
-                              style={{
-                                ...styles.selectedEvalCard,
-                                background: theme.card,
-                                border: `1px solid ${theme.border}`,
-                              }}
-                            >
-                              <div style={styles.selectedEvalLabel}>Industry</div>
-                              <div style={styles.selectedEvalValueSmall}>
-                                {selectedIndustryData.industry}
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                ...styles.selectedEvalCard,
-                                background: theme.card,
-                                border: `1px solid ${theme.border}`,
-                              }}
-                            >
-                              <div style={styles.selectedEvalLabel}>Average</div>
-                              <div style={styles.selectedEvalValue}>
-                                {selectedIndustryData.average_score}
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                ...styles.selectedEvalCard,
-                                background: theme.card,
-                                border: `1px solid ${theme.border}`,
-                              }}
-                            >
-                              <div style={styles.selectedEvalLabel}>Highest</div>
-                              <div style={styles.selectedEvalValue}>
-                                {selectedIndustryData.highest_score}
-                              </div>
-                              <div style={{ fontSize: 12, color: theme.subText, marginTop: 6 }}>
-                                BR: {selectedIndustryData.highest_sme_br || "-"}
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                ...styles.selectedEvalCard,
-                                background: theme.card,
-                                border: `1px solid ${theme.border}`,
-                              }}
-                            >
-                              <div style={styles.selectedEvalLabel}>Lowest</div>
-                              <div style={styles.selectedEvalValue}>
-                                {selectedIndustryData.lowest_score}
-                              </div>
-                              <div style={{ fontSize: 12, color: theme.subText, marginTop: 6 }}>
-                                BR: {selectedIndustryData.lowest_sme_br || "-"}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              ...styles.subPanel,
-                              background: theme.card,
-                              border: `1px solid ${theme.border}`,
-                              marginTop: 18,
-                            }}
-                          >
-                            <h4 style={{ marginTop: 0, marginBottom: 14 }}>
-                              Industry Score Distribution
-                            </h4>
-
-                            {!Array.isArray(selectedIndustryData.smes) ||
-                            selectedIndustryData.smes.length === 0 ? (
-                              <p style={{ color: theme.subText }}>
-                                No scored SMEs available for this industry.
-                              </p>
-                            ) : (
-                              <div style={styles.chartWrap}>
-                                {selectedIndustryData.smes.map((sme) => (
-                                  <div key={sme.id} style={styles.chartCol}>
-                                    <div
-                                      style={{
-                                        color: theme.text,
-                                        fontSize: 12,
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      {sme.total_score}
-                                    </div>
-
-                                    <div
-                                      style={{
-                                        ...styles.chartBarArea,
-                                        background: dark
-                                          ? "rgba(255,255,255,0.05)"
-                                          : "rgba(11,18,32,0.05)",
-                                        border: `1px solid ${theme.border}`,
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          ...styles.chartBar,
-                                          height: getBarHeight(
-                                            sme.total_score,
-                                            industryMaxScore
-                                          ),
-                                          background: theme.button,
-                                        }}
-                                      />
-                                    </div>
-
-                                    <div
-                                      style={{
-                                        ...styles.chartLabel,
-                                        color: theme.subText,
-                                      }}
-                                      title={`${sme.name} (${sme.br_number})`}
-                                    >
-                                      {sme.br_number}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      ...styles.subPanel,
-                      background: theme.bg,
-                      border: `1px solid ${theme.border}`,
-                      marginTop: 20,
-                    }}
-                  >
-                    <h4 style={{ marginTop: 0 }}>SME Comparison Tool</h4>
-                    <p style={{ color: theme.subText, marginTop: 6 }}>
-                      Select 2 or 3 SMEs to compare their total and criterion-level scores.
-                    </p>
-
-                    <div style={styles.smeSelectGrid}>
-                      {smes.map((sme) => (
-                        <label
-                          key={sme.id}
-                          style={{
-                            ...styles.selectCard,
-                            background: selectedIds.includes(sme.id)
-                              ? theme.tabActiveBg
-                              : theme.card,
-                            border: `1px solid ${
-                              selectedIds.includes(sme.id)
-                                ? theme.tabActiveBorder
-                                : theme.border
-                            }`,
-                            color: theme.text,
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(sme.id)}
-                            onChange={() => toggleSme(sme.id)}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 700 }}>{sme.name}</div>
-                            <div style={{ fontSize: 13, color: theme.subText }}>
-                              BR: {sme.br_number}
-                            </div>
-                            <div style={{ fontSize: 13, color: theme.subText }}>
-                              Industry: {sme.industry}
-                            </div>
-                            <div style={{ fontSize: 13, color: theme.subText }}>
-                              Score: {sme.total_score}
-                            </div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-
-                    {comparisonData.length > 0 && (
-                      <div style={{ marginTop: 24 }}>
-                        <h4 style={{ marginBottom: 14 }}>Comparison Result</h4>
-                        <div style={styles.cardGrid}>
-                          {comparisonData.map((item) => (
-                            <div
-                              key={item.id}
-                              style={{
-                                ...styles.card,
-                                background: theme.card,
-                                border: `1px solid ${theme.border}`,
-                              }}
-                            >
-                              <h3 style={{ marginTop: 0 }}>{item.name}</h3>
-                              <div style={{ color: theme.subText, marginBottom: 6 }}>
-                                BR: {item.br_number}
-                              </div>
-                              <div style={{ color: theme.subText, marginBottom: 6 }}>
-                                Industry: {item.industry}
-                              </div>
-                              <div style={{ fontWeight: 700, marginBottom: 14 }}>
-                                Total Score: {item.total_score}
-                              </div>
-
-                              <div
-                                style={{
-                                  fontSize: 14,
-                                  fontWeight: 700,
-                                  marginBottom: 10,
-                                }}
-                              >
-                                Criteria
-                              </div>
-
-                              {Object.keys(item.criteria || {}).length === 0 ? (
-                                <div style={{ color: theme.subText }}>
-                                  No criterion scores available.
-                                </div>
-                              ) : (
-                                Object.entries(item.criteria).map(([code, score]) => (
-                                  <div key={code} style={styles.criteriaRow}>
-                                    <span>{code}</span>
-                                    <strong>{score}</strong>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      Start Scoring
+                    </button>
                   </div>
                 </div>
-              </>
-            )}
-          </section>
+              )}
+            </section>
+          </div>
         )}
       </main>
+
+      {showPasswordModal && (
+        <div style={styles.modalOverlay}>
+          <div
+            style={{
+              ...styles.modalCard,
+              background: theme.card,
+              color: theme.text,
+              border: `1px solid ${theme.border}`,
+            }}
+          >
+            <div style={styles.modalTop}>
+              <h3 style={{ margin: 0, fontSize: 22 }}>Change Password</h3>
+              <button
+                style={{ ...styles.closeBtn, color: theme.text }}
+                onClick={() => setShowPasswordModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword}>
+              <label style={styles.label}>Old Password</label>
+              <input
+                type="password"
+                name="old_password"
+                value={passwordForm.old_password}
+                onChange={handlePasswordInput}
+                style={{
+                  ...styles.input,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
+
+              <label style={styles.label}>New Password</label>
+              <input
+                type="password"
+                name="new_password"
+                value={passwordForm.new_password}
+                onChange={handlePasswordInput}
+                style={{
+                  ...styles.input,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
+
+              <label style={styles.label}>Confirm New Password</label>
+              <input
+                type="password"
+                name="confirm_password"
+                value={passwordForm.confirm_password}
+                onChange={handlePasswordInput}
+                style={{
+                  ...styles.input,
+                  background: theme.inputBg,
+                  color: theme.text,
+                  border: `1px solid ${theme.border}`,
+                }}
+              />
+
+              {passwordMsg && (
+                <div
+                  style={{
+                    ...styles.passwordMsg,
+                    color:
+                      passwordMsg === "Password changed successfully."
+                        ? "#16a34a"
+                        : "#dc2626",
+                  }}
+                >
+                  {passwordMsg}
+                </div>
+              )}
+
+              <div style={styles.modalActions}>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.cancelBtn,
+                    background: theme.inputBg,
+                    color: theme.text,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                  onClick={() => setShowPasswordModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ ...styles.primaryBtn, background: theme.button }}
+                  disabled={passwordSaving}
+                >
+                  {passwordSaving ? "Updating..." : "Update Password"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-const lightTheme = {
-  bg: "#f4f9ff",
-  navBg: "rgba(255,255,255,0.9)",
-  text: "#0b1220",
-  subText: "#5b6472",
-  card: "#ffffff",
-  border: "rgba(11,18,32,0.12)",
-  button: "#2F96B4",
-  tabActiveBg: "rgba(47,150,180,0.10)",
-  tabActiveBorder: "rgba(47,150,180,0.28)",
-};
+const BRAND = "#2F96B4";
 
 const darkTheme = {
-  bg: "#071423",
-  navBg: "rgba(7,20,35,0.92)",
+  bg: "#0B1220",
+  navBg: "rgba(16,24,38,0.92)",
+  card: "#172033",
+  resultBg: "#111827",
+  inputBg: "#0f172a",
   text: "#ffffff",
   subText: "rgba(255,255,255,0.72)",
-  card: "rgba(255,255,255,0.06)",
-  border: "rgba(255,255,255,0.15)",
-  button: "#67d4f3",
-  tabActiveBg: "rgba(103,212,243,0.10)",
-  tabActiveBorder: "rgba(103,212,243,0.30)",
+  button: BRAND,
+  border: "rgba(255,255,255,0.10)",
+  errorBg: "rgba(220,38,38,0.10)",
+  errorText: "#fecaca",
+  errorBorder: "rgba(220,38,38,0.30)",
+  tabActiveBg: "rgba(47,150,180,0.12)",
+  tabActiveBorder: "rgba(47,150,180,0.24)",
+  accent1: "#3B82F6",
+  accent2: "#10B981",
+  accent3: "#F59E0B",
+  softAccent1: "rgba(59,130,246,0.14)",
+  softAccent2: "rgba(16,185,129,0.14)",
+  softAccent3: "rgba(245,158,11,0.16)",
+  unreadBg: "rgba(47,150,180,0.10)",
+};
+
+const lightTheme = {
+  bg: "#F4F7FB",
+  navBg: "rgba(255,255,255,0.92)",
+  card: "#ffffff",
+  resultBg: "#F8FAFC",
+  inputBg: "#ffffff",
+  text: "#0F172A",
+  subText: "#475569",
+  button: BRAND,
+  border: "rgba(15,23,42,0.10)",
+  errorBg: "#FEF2F2",
+  errorText: "#B91C1C",
+  errorBorder: "#FECACA",
+  tabActiveBg: "rgba(47,150,180,0.08)",
+  tabActiveBorder: "rgba(47,150,180,0.18)",
+  accent1: "#2563EB",
+  accent2: "#059669",
+  accent3: "#D97706",
+  softAccent1: "rgba(37,99,235,0.10)",
+  softAccent2: "rgba(5,150,105,0.10)",
+  softAccent3: "rgba(217,119,6,0.12)",
+  unreadBg: "rgba(47,150,180,0.08)",
 };
 
 const styles = {
   page: {
     minHeight: "100vh",
+    fontFamily: "Inter, Arial, sans-serif",
   },
+
   navbar: {
+    minHeight: 78,
+    padding: "14px 28px",
+    display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
+    alignItems: "center",
     position: "sticky",
     top: 0,
-    zIndex: 100,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 20,
-    padding: "14px 28px",
-    backdropFilter: "blur(12px)",
+    zIndex: 50,
+    backdropFilter: "blur(10px)",
+    gap: 16,
   },
+
   brand: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     cursor: "pointer",
-    minWidth: 220,
+    minWidth: 260,
   },
-  logoImg: {
-    width: 108,
-    height: 58,
-    objectFit: "contain",
-    display: "block",
-  },
+
   brandTextWrap: {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
     lineHeight: 1.1,
   },
+
   brandTitle: {
     fontSize: 24,
     fontWeight: 800,
     letterSpacing: "-0.3px",
     marginBottom: 3,
   },
+
   brandSub: {
     fontSize: 12,
     fontWeight: 500,
     marginTop: 4,
   },
+
+  logoImg: {
+    width: 108,
+    height: 58,
+    objectFit: "contain",
+    display: "block",
+  },
+
   tabWrap: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
     justifyContent: "center",
-    flex: 1,
+    gap: 10,
+    flexWrap: "wrap",
   },
+
   tabBtn: {
-    padding: "10px 18px",
+    padding: "11px 20px",
     borderRadius: 999,
+    cursor: "pointer",
     fontWeight: 700,
     fontSize: 14,
-    cursor: "pointer",
-    transition: "0.2s ease",
+    transition: "all 0.2s ease",
   },
+
   rightWrap: {
     display: "flex",
+    justifyContent: "flex-end",
     alignItems: "center",
     gap: 10,
-    minWidth: 220,
-    justifyContent: "flex-end",
   },
+
   iconBtn: {
-    padding: "10px 14px",
-    borderRadius: 10,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     cursor: "pointer",
-    fontWeight: 700,
-  },
-  main: {
-    padding: "34px 6%",
-  },
-  messageBox: {
-    marginBottom: 16,
-    padding: "12px 14px",
-    borderRadius: 12,
-    fontWeight: 600,
-  },
-  sectionHeader: {
+    fontSize: 18,
+    border: "none",
+    position: "relative",
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  analysisGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 20,
-  },
-  panel: {
-    padding: 22,
-    borderRadius: 18,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-  },
-  panelHead: {
+
+  badge: {
+    position: "absolute",
+    top: -6,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 800,
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 5px",
+    background: "#ef4444",
+    color: "#fff",
   },
-  panelSub: {
-    margin: "6px 0 0",
-    fontSize: 13,
-  },
-  innerStatsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-    gap: 14,
-    marginTop: 6,
-  },
-  innerStatCard: {
-    padding: 16,
-    borderRadius: 14,
-    textAlign: "center",
-  },
-  innerStatLabel: {
-    fontSize: 12,
-    marginBottom: 8,
-    opacity: 0.8,
-  },
-  innerStatValue: {
-    fontSize: 24,
-    fontWeight: 800,
-  },
-  subPanel: {
-    padding: 18,
-    borderRadius: 16,
-  },
-  selectInput: {
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: 12,
-    outline: "none",
-  },
-  selectedEvalGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-    gap: 12,
-  },
-  selectedEvalCard: {
-    padding: 14,
-    borderRadius: 14,
-  },
-  selectedEvalLabel: {
-    fontSize: 12,
-    opacity: 0.8,
-    marginBottom: 8,
-  },
-  selectedEvalValue: {
-    fontSize: 24,
-    fontWeight: 800,
-  },
-  selectedEvalValueSmall: {
+
+  profileBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: "50%",
+    cursor: "pointer",
     fontSize: 18,
     fontWeight: 800,
-    lineHeight: 1.3,
-  },
-  chartWrap: {
     display: "flex",
-    alignItems: "flex-end",
-    gap: 14,
-    overflowX: "auto",
-    paddingBottom: 12,
-    paddingTop: 8,
-    minHeight: 280,
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+    border: "none",
   },
-  chartCol: {
-    minWidth: 90,
+
+  popupWrap: {
+    position: "relative",
+  },
+
+  dropdown: {
+    position: "absolute",
+    top: 56,
+    right: 0,
+    minWidth: 320,
+    maxHeight: 360,
+    overflowY: "auto",
+    borderRadius: 18,
+    boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+    overflowX: "hidden",
+    zIndex: 100,
+  },
+
+  dropdownHead: {
+    padding: "14px 16px",
+    fontSize: 14,
+    fontWeight: 800,
+  },
+
+  dropdownText: {
+    padding: "12px 16px",
+    fontSize: 14,
+  },
+
+  dropdownItem: {
+    width: "100%",
+    padding: "13px 15px",
+    border: "none",
+    background: "transparent",
+    textAlign: "left",
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
+  },
+
+  notificationItem: {
+    padding: "14px 16px",
+  },
+
+  notificationTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    marginBottom: 4,
+  },
+
+  notificationText: {
+    fontSize: 13,
+    lineHeight: 1.5,
+    marginBottom: 6,
+  },
+
+  notificationTime: {
+    fontSize: 12,
+  },
+
+  profileHeader: {
+    padding: "14px 16px",
+  },
+
+  profileName: {
+    fontSize: 15,
+    fontWeight: 800,
+  },
+
+  profileRole: {
+    marginTop: 4,
+    fontSize: 13,
+  },
+
+  main: {
+    width: "min(1180px, 92%)",
+    margin: "32px auto",
+    paddingBottom: 40,
+  },
+
+  heroSection: {
+    marginBottom: 12,
+  },
+
+  heroTitle: {
+    margin: 0,
+    fontSize: 30,
+    fontWeight: 800,
+    letterSpacing: "-0.4px",
+  },
+
+  alert: {
+    padding: "14px 16px",
+    borderRadius: 14,
+    marginBottom: 20,
+    fontWeight: 600,
+  },
+
+  sectionBlock: {
+    marginTop: 26,
+  },
+
+  sectionHeader: {
+    marginBottom: 16,
+  },
+
+  sectionTitle: {
+    margin: 0,
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: "-0.3px",
+    lineHeight: 1.2,
+  },
+
+  sectionSub: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 1.6,
+  },
+
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 18,
+  },
+
+  statCard: {
+    borderRadius: 22,
+    padding: 22,
+    boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+    position: "relative",
+    overflow: "hidden",
+  },
+
+  statTopBar: {
+    height: 5,
+    borderRadius: 999,
+    marginBottom: 18,
+  },
+
+  statMetaRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  statBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+
+  statLabel: {
+    fontSize: 14,
+    opacity: 0.78,
+    marginBottom: 8,
+    fontWeight: 600,
+  },
+
+  statValue: {
+    fontSize: 34,
+    fontWeight: 800,
+    lineHeight: 1,
+  },
+
+  searchCard: {
+    marginTop: 30,
+    borderRadius: 22,
+    padding: 28,
+    boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+  },
+
+  scoringGrid: {
+    marginTop: 30,
+    display: "grid",
+    gridTemplateColumns: "1fr 1.2fr",
+    gap: 20,
+  },
+
+  panelCard: {
+    borderRadius: 22,
+    padding: 28,
+    boxShadow: "0 12px 30px rgba(15,23,42,0.06)",
+  },
+
+  panelHeaderLine: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 16,
+    marginBottom: 20,
+    flexWrap: "wrap",
+  },
+
+  searchRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 150px",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  search: {
+    width: "100%",
+    padding: "15px 16px",
+    borderRadius: 16,
+    outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
+  },
+
+  searchBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "15px 18px",
+    borderRadius: 16,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 15,
+    boxShadow: "0 10px 22px rgba(47,150,180,0.25)",
+  },
+
+  inlineMessage: {
+    marginTop: 14,
+    fontSize: 14,
+    fontWeight: 500,
+  },
+
+  resultCard: {
+    marginTop: 18,
+    padding: 18,
+    borderRadius: 18,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+
+  resultLeft: {
     display: "flex",
     flexDirection: "column",
+    gap: 6,
+  },
+
+  resultTopRow: {
+    display: "flex",
     alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+
+  resultTitle: {
+    fontSize: 18,
+    fontWeight: 800,
+  },
+
+  resultSub: {
+    fontSize: 14,
+  },
+
+  resultPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 800,
+  },
+
+  scoreResultCard: {
+    marginTop: 18,
+    padding: 18,
+    borderRadius: 18,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 18,
+    flexWrap: "wrap",
+  },
+
+  scoreResultMain: {
+    display: "flex",
+    flexDirection: "column",
     gap: 8,
   },
-  chartBarArea: {
-    width: 54,
-    height: 200,
-    borderRadius: 14,
+
+  scoreResultTop: {
     display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    padding: 6,
-  },
-  chartBar: {
-    width: "100%",
-    borderRadius: 10,
-    transition: "0.3s ease",
-  },
-  chartLabel: {
-    fontSize: 12,
-    textAlign: "center",
-    lineHeight: 1.3,
-    maxWidth: 88,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  evaluationCountCard: {
-    marginTop: 22,
-    padding: 18,
-    borderRadius: 14,
-    textAlign: "center",
-  },
-  smeSelectGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-    gap: 14,
-    marginTop: 16,
-  },
-  selectCard: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: 14,
-    borderRadius: 14,
-    cursor: "pointer",
-  },
-  cardGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: 20,
-    marginTop: 20,
-  },
-  card: {
-    padding: 22,
-    borderRadius: 18,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-  },
-  cardTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  actionRow: {
-    display: "flex",
+    alignItems: "center",
     gap: 10,
     flexWrap: "wrap",
-    marginTop: 18,
   },
-  approveBtn: {
-    padding: "10px 16px",
-    borderRadius: 10,
-    border: "none",
-    background: "#22c55e",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  disapproveBtn: {
-    padding: "10px 16px",
-    borderRadius: 10,
-    border: "none",
-    background: "#ef4444",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  blockBtn: {
-    padding: "10px 16px",
-    borderRadius: 10,
-    border: "none",
-    background: "#ef4444",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  unblockBtn: {
-    padding: "10px 16px",
-    borderRadius: 10,
-    border: "none",
-    background: "#2F96B4",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  searchRow: {
+
+  actionWrap: {
     display: "flex",
-    gap: 12,
+    gap: 10,
     alignItems: "center",
     flexWrap: "wrap",
   },
-  searchInput: {
-    flex: 1,
-    minWidth: 260,
-    padding: "12px 14px",
-    borderRadius: 12,
-    outline: "none",
+
+  primaryBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "13px 18px",
+    borderRadius: 14,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 15,
+    boxShadow: "0 10px 22px rgba(47,150,180,0.25)",
   },
-  searchBtn: {
+
+  smallPrimaryBtn: {
+    border: "none",
+    color: "#fff",
+    padding: "11px 15px",
+    borderRadius: 12,
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 14,
+  },
+
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.45)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    padding: 20,
+  },
+
+  modalCard: {
+    width: "100%",
+    maxWidth: 470,
+    borderRadius: 24,
+    padding: 24,
+    boxShadow: "0 24px 50px rgba(0,0,0,0.22)",
+  },
+
+  modalTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  closeBtn: {
+    border: "none",
+    background: "transparent",
+    fontSize: 30,
+    cursor: "pointer",
+    lineHeight: 1,
+  },
+
+  label: {
+    display: "block",
+    marginBottom: 8,
+    marginTop: 14,
+    fontWeight: 700,
+    fontSize: 14,
+  },
+
+  input: {
+    width: "100%",
+    padding: "13px 14px",
+    borderRadius: 14,
+    outline: "none",
+    fontSize: 15,
+    boxSizing: "border-box",
+  },
+
+  passwordMsg: {
+    marginTop: 14,
+    fontSize: 14,
+    fontWeight: 600,
+  },
+
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 22,
+  },
+
+  cancelBtn: {
     padding: "12px 18px",
     borderRadius: 12,
-    border: "none",
-    background: "#2F96B4",
-    color: "white",
-    fontWeight: 700,
     cursor: "pointer",
-  },
-  emptyCard: {
-    marginTop: 20,
-    padding: 24,
-    borderRadius: 16,
-  },
-  criteriaRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "8px 0",
-    borderBottom: "1px solid rgba(148,163,184,0.16)",
+    fontWeight: 700,
+    fontSize: 14,
   },
 };
