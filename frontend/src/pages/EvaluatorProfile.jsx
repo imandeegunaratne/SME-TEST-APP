@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { appNavbarStyles, appShellStyles, createAppTheme } from "../styles/appTheme";
 
 export default function EvaluatorProfile() {
   const navigate = useNavigate();
 
   const [dark] = useState(() => localStorage.getItem("theme") === "dark");
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = createAppTheme(dark, dark ? darkTheme : lightTheme);
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -224,18 +225,15 @@ const darkTheme = {
 };
 
 const styles = {
-  page: { minHeight: "100vh", fontFamily: "Inter, Arial, sans-serif" },
+  page: appShellStyles.page,
   navbar: {
-    position: "sticky", top: 0, zIndex: 50,
-    padding: "14px 28px", display: "grid",
+    ...appNavbarStyles.shell,
+    display: "grid",
     gridTemplateColumns: "auto 1fr auto",
-    alignItems: "center", gap: 16,
-    backdropFilter: "blur(10px)",
+    alignItems: "center",
+    gap: 16,
   },
-  backBtn: {
-    border: "none", borderRadius: 12, padding: "10px 16px",
-    cursor: "pointer", fontWeight: 700, fontSize: 14,
-  },
+  backBtn: appNavbarStyles.backBtn,
   main: { width: "min(680px, 92%)", margin: "32px auto", paddingBottom: 40 },
   alert: { padding: "14px 16px", borderRadius: 12, marginBottom: 16, fontWeight: 600 },
   card: { borderRadius: 20, padding: 24, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" },

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import {
+  appNavbarStyles,
+  appShellStyles,
+  createAppTheme,
+} from "../styles/appTheme";
 
 export default function BankAdminDashboard() {
   const navigate = useNavigate();
@@ -11,7 +16,7 @@ export default function BankAdminDashboard() {
   });
 
   const [activeTab, setActiveTab] = useState("approval");
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = createAppTheme(dark, dark ? darkTheme : lightTheme);
 
   const [pending, setPending] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -1316,77 +1321,34 @@ const darkTheme = {
 };
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-  },
+  page: appShellStyles.page,
   navbar: {
-    position: "sticky",
-    top: 0,
+    ...appNavbarStyles.shell,
+    ...appNavbarStyles.flexShell,
     zIndex: 100,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: 20,
-    padding: "14px 28px",
-    backdropFilter: "blur(12px)",
   },
   brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    cursor: "pointer",
+    ...appNavbarStyles.brand,
     minWidth: 220,
   },
-  logoImg: {
-    width: 108,
-    height: 58,
-    objectFit: "contain",
-    display: "block",
-  },
-  brandTextWrap: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    lineHeight: 1.1,
-  },
-  brandTitle: {
-    fontSize: 24,
-    fontWeight: 800,
-    letterSpacing: "-0.3px",
-    marginBottom: 3,
-  },
-  brandSub: {
-    fontSize: 12,
-    fontWeight: 500,
-    marginTop: 4,
-  },
+  logoImg: appNavbarStyles.logoImg,
+  brandTextWrap: appNavbarStyles.brandTextWrap,
+  brandTitle: appNavbarStyles.brandTitle,
+  brandSub: appNavbarStyles.brandSub,
   tabWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    justifyContent: "center",
+    ...appNavbarStyles.tabWrap,
     flex: 1,
   },
-  tabBtn: {
-    padding: "10px 18px",
-    borderRadius: 999,
-    fontWeight: 700,
-    fontSize: 14,
-    cursor: "pointer",
-    transition: "0.2s ease",
-  },
+  tabBtn: appNavbarStyles.tabBtn,
   rightWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
+    ...appNavbarStyles.rightWrap,
     minWidth: 220,
-    justifyContent: "flex-end",
   },
   iconBtn: {
+    ...appNavbarStyles.iconBtn,
+    width: "auto",
     padding: "10px 14px",
-    borderRadius: 10,
-    cursor: "pointer",
-    fontWeight: 700,
   },
   main: {
     padding: "34px 6%",

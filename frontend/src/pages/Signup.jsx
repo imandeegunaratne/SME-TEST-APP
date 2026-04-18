@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { authPageStyles, getAuthTheme } from "../styles/authStyles";
 
 export default function Signup() {
   const navigate = useNavigate();
 
   // Fixed: theme read inside useState so it doesn't freeze on mount
   const [dark] = useState(() => localStorage.getItem("theme") === "dark");
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = getAuthTheme(dark, {
+    muted: dark ? "rgba(255,255,255,0.75)" : "#64748B",
+    card: dark ? "#172033" : "#FFFFFF",
+    shadow: dark
+      ? "0 16px 32px rgba(0,0,0,0.18)"
+      : "0 16px 32px rgba(15,23,42,0.08)",
+  });
 
   const [form, setForm] = useState({
     bank_code: "",
@@ -155,12 +162,15 @@ export default function Signup() {
             }}
           />
 
-          <button disabled={loading} style={styles.button}>
+          <button
+            disabled={loading}
+            style={{ ...styles.button, background: theme.primary }}
+          >
             {loading ? "Creating account..." : "Create account"}
           </button>
 
           {msg && <div style={styles.success}>{msg}</div>}
-          {err && <div style={styles.error}>{err}</div>}
+          {err && <div style={{ ...styles.error, color: theme.errorText }}>{err}</div>}
 
           {/* Manual navigate button stays available even after success */}
           <button
@@ -183,39 +193,11 @@ export default function Signup() {
   );
 }
 
-const lightTheme = {
-  bg: "#F4F8FB",
-  card: "#FFFFFF",
-  text: "#0F172A",
-  muted: "#64748B",
-  border: "#E2E8F0",
-  inputBg: "#FFFFFF",
-  shadow: "0 16px 32px rgba(15,23,42,0.08)",
-};
-
-const darkTheme = {
-  bg: "#071423",
-  card: "#172033",
-  text: "#FFFFFF",
-  muted: "rgba(255,255,255,0.75)",
-  border: "rgba(255,255,255,0.14)",
-  inputBg: "rgba(255,255,255,0.04)",
-  shadow: "0 16px 32px rgba(0,0,0,0.18)",
-};
-
 const styles = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
+  page: authPageStyles.page,
   card: {
-    width: "100%",
+    ...authPageStyles.card,
     maxWidth: 460,
-    padding: 30,
-    borderRadius: 18,
   },
   title: {
     marginBottom: 10,
@@ -227,36 +209,10 @@ const styles = {
     fontSize: 14,
     lineHeight: 1.6,
   },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  input: {
-    padding: 12,
-    borderRadius: 10,
-    outline: "none",
-    fontSize: 14,
-  },
-  button: {
-    padding: 12,
-    borderRadius: 10,
-    border: "none",
-    background: "#2F96B4",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
-    fontSize: 15,
-  },
-  link: {
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    color: "#2F96B4",
-    textAlign: "left",
-    padding: 0,
-    fontSize: 14,
-  },
-  error: { color: "#DC2626", fontSize: 14 },
-  success: { color: "#059669", fontSize: 14 },
+  form: authPageStyles.form,
+  input: { ...authPageStyles.input, fontSize: 14 },
+  button: authPageStyles.button,
+  link: { ...authPageStyles.link, color: "#2F96B4" },
+  error: authPageStyles.error,
+  success: authPageStyles.success,
 };

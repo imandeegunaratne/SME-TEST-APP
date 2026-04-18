@@ -1,6 +1,11 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import {
+  appNavbarStyles,
+  appShellStyles,
+  createAppTheme,
+} from "../styles/appTheme";
 
 const BRAND = "#2F96B4";
 
@@ -68,7 +73,8 @@ export default function SmeRegister() {
   });
 
   const theme = useMemo(
-    () => (themeMode === "dark" ? darkTheme : lightTheme),
+    () =>
+      createAppTheme(themeMode, themeMode === "dark" ? darkTheme : lightTheme),
     [themeMode]
   );
 
@@ -345,44 +351,21 @@ export default function SmeRegister() {
 }
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    fontFamily: "Inter, Arial, sans-serif",
-  },
+  page: appShellStyles.page,
 
   navbar: {
-    position: "sticky",
-    top: 0,
+    ...appNavbarStyles.shell,
+    ...appNavbarStyles.flexShell,
     zIndex: 20,
-    padding: "14px 5%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backdropFilter: "blur(10px)",
   },
 
-  brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    cursor: "pointer",
-  },
+  brand: appNavbarStyles.brand,
 
-  logoImg: {
-    width: 90,
-    height: 60,
-    objectFit: "contain",
-  },
+  logoImg: appNavbarStyles.logoImg,
 
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: 800,
-  },
+  brandTitle: appNavbarStyles.brandTitle,
 
-  brandSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
+  brandSub: appNavbarStyles.brandSub,
 
   main: {
     width: "min(600px, 92%)",

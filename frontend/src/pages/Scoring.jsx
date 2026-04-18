@@ -2,6 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import logo from "../assets/logo.png";
+import {
+  appNavbarStyles,
+  appShellStyles,
+  createAppTheme,
+} from "../styles/appTheme";
 
 /* =========================
    Bands + Rubric
@@ -212,7 +217,7 @@ export default function RubricScoringPage() {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = createAppTheme(dark, dark ? darkTheme : lightTheme);
 
   const [sme, setSme] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -756,72 +761,37 @@ export default function RubricScoringPage() {
 }
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    fontFamily: "Inter, Arial, sans-serif",
-  },
+  page: appShellStyles.page,
 
   navbar: {
-    minHeight: 76,
-    padding: "14px 28px",
+    ...appNavbarStyles.shell,
     display: "grid",
     gridTemplateColumns: "1fr auto",
     alignItems: "center",
-    position: "sticky",
-    top: 0,
-    zIndex: 50,
-    backdropFilter: "blur(10px)",
     gap: 16,
   },
 
   brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    cursor: "pointer",
+    ...appNavbarStyles.brand,
     minWidth: 260,
   },
 
-  brandTextWrap: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    lineHeight: 1.1,
-  },
+  brandTextWrap: appNavbarStyles.brandTextWrap,
 
-  brandTitle: {
-    fontSize: 24,
-    fontWeight: 800,
-    letterSpacing: "-0.3px",
-    marginBottom: 3,
-  },
+  brandTitle: appNavbarStyles.brandTitle,
 
   brandSub: {
+    ...appNavbarStyles.brandSub,
     fontSize: 13,
-    fontWeight: 500,
   },
 
-  logoImg: {
-    width: 108,
-    height: 58,
-    objectFit: "contain",
-    display: "block",
-  },
+  logoImg: appNavbarStyles.logoImg,
 
-  rightWrap: {
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
-  },
+  rightWrap: { ...appNavbarStyles.rightWrap, flexWrap: "wrap" },
 
   iconBtn: {
-    height: 46,
-    borderRadius: 14,
-    cursor: "pointer",
-    fontSize: 14,
-    border: "none",
+    ...appNavbarStyles.iconBtn,
+    width: "auto",
   },
 
   profileBtn: {

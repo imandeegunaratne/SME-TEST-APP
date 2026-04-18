@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { appNavbarStyles, appShellStyles, createAppTheme } from "../styles/appTheme";
 
 // Fixed: corrected spelling of "Interest" and "advantage"
 const CRITERIA_NAMES = [
@@ -25,7 +26,10 @@ export default function SMEReport() {
 
   // Fixed: theme read inside useState so it doesn't freeze on mount
   const [dark] = useState(() => localStorage.getItem("theme") !== "light");
-  const theme = useMemo(() => (dark ? darkTheme : lightTheme), [dark]);
+  const theme = useMemo(
+    () => createAppTheme(dark, dark ? darkTheme : lightTheme),
+    [dark]
+  );
 
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -302,18 +306,17 @@ const lightTheme = {
 };
 
 const styles = {
-  page: { minHeight: "100vh", fontFamily: "Arial, sans-serif" },
+  page: appShellStyles.page,
   navbar: { position: "sticky", top: 0, zIndex: 50, width: "100%" },
   navInner: {
-    width: "min(1280px, 96%)", margin: "0 auto", minHeight: 92,
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    gap: 20, padding: "14px 0",
+    ...appNavbarStyles.navInner,
+    padding: "14px 0",
   },
-  logoButton: { display: "flex", alignItems: "center", gap: 16, background: "transparent", border: "none", cursor: "pointer", padding: 0 },
-  logoImg: { width: 120, height: "auto", objectFit: "contain" },
-  logoTextWrap: { display: "flex", flexDirection: "column", alignItems: "flex-start" },
-  logoTitle: { fontSize: 24, fontWeight: 800, lineHeight: 1.1 },
-  logoSubtitle: { fontSize: 14, marginTop: 4 },
+  logoButton: appNavbarStyles.logoButton,
+  logoImg: appNavbarStyles.logoImg,
+  logoTextWrap: { ...appNavbarStyles.brandTextWrap, alignItems: "flex-start" },
+  logoTitle: { ...appNavbarStyles.brandTitle, lineHeight: 1.1 },
+  logoSubtitle: { ...appNavbarStyles.brandSub, fontSize: 14 },
   navActions: { display: "flex", alignItems: "center", gap: 14 },
   downloadBtn: { border: "none", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700 },
   wrapper: { width: "min(1180px, 95%)", margin: "0 auto", padding: "28px 0 40px" },

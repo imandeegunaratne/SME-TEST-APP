@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import {
+  appNavbarStyles,
+  appShellStyles,
+  createAppTheme,
+} from "../styles/appTheme";
 
 export default function EvaluatorHome() {
   const navigate = useNavigate();
@@ -12,7 +17,8 @@ export default function EvaluatorHome() {
   });
 
   const theme = useMemo(
-    () => (themeMode === "dark" ? darkTheme : lightTheme),
+    () =>
+      createAppTheme(themeMode, themeMode === "dark" ? darkTheme : lightTheme),
     [themeMode]
   );
 
@@ -979,82 +985,31 @@ const lightTheme = {
 };
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    fontFamily: "Inter, Arial, sans-serif",
-  },
+  page: appShellStyles.page,
 
   navbar: {
-    minHeight: 78,
-    padding: "14px 28px",
-    display: "grid",
-    gridTemplateColumns: "1fr auto 1fr",
-    alignItems: "center",
-    position: "sticky",
-    top: 0,
-    zIndex: 50,
-    backdropFilter: "blur(10px)",
-    gap: 16,
+    ...appNavbarStyles.shell,
+    ...appNavbarStyles.gridShell,
   },
 
   brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    cursor: "pointer",
+    ...appNavbarStyles.brand,
     minWidth: 260,
   },
 
-  brandTextWrap: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    lineHeight: 1.1,
-  },
+  brandTextWrap: appNavbarStyles.brandTextWrap,
 
-  brandTitle: {
-    fontSize: 24,
-    fontWeight: 800,
-    letterSpacing: "-0.3px",
-    marginBottom: 3,
-  },
+  brandTitle: appNavbarStyles.brandTitle,
 
-  brandSub: {
-    fontSize: 12,
-    fontWeight: 500,
-    marginTop: 4,
-  },
+  brandSub: appNavbarStyles.brandSub,
 
-  logoImg: {
-    width: 108,
-    height: 58,
-    objectFit: "contain",
-    display: "block",
-  },
+  logoImg: appNavbarStyles.logoImg,
 
-  tabWrap: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    flexWrap: "wrap",
-  },
+  tabWrap: appNavbarStyles.tabWrap,
 
-  tabBtn: {
-    padding: "11px 20px",
-    borderRadius: 999,
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 14,
-    transition: "all 0.2s ease",
-  },
+  tabBtn: appNavbarStyles.tabBtn,
 
-  rightWrap: {
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: 10,
-  },
+  rightWrap: appNavbarStyles.rightWrap,
 
   iconBtn: {
     width: 46,

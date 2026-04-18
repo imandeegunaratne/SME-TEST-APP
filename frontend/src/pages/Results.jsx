@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { createAppTheme } from "../styles/appTheme";
 
 const BRAND = "#2F96B4";
 const darkTheme = {
@@ -47,7 +48,7 @@ export default function CapabilityResult() {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = createAppTheme(dark, dark ? darkTheme : lightTheme);
 
   const token = localStorage.getItem("token") || "";
   useEffect(() => {

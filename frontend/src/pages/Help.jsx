@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import logo from "../assets/logo.png";
+import { appNavbarStyles, appShellStyles, createAppTheme } from "../styles/appTheme";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -16,7 +17,8 @@ export default function Settings() {
   }, [themeMode]);
 
   const theme = useMemo(
-    () => (themeMode === "dark" ? darkTheme : lightTheme),
+    () =>
+      createAppTheme(themeMode, themeMode === "dark" ? darkTheme : lightTheme),
     [themeMode]
   );
 
@@ -143,52 +145,34 @@ const lightTheme = {
 
 const styles = {
   page: {
-    minHeight: "100vh",
+    ...appShellStyles.page,
     minWidth: 0,
     width: "100vw",
     overflowX: "hidden",
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
     display: "flex",
     flexDirection: "column",
   },
 
   topbar: {
-    position: "sticky",
-    top: 0,
+    ...appNavbarStyles.shell,
+    ...appNavbarStyles.flexShell,
     zIndex: 20,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px 5%",
-    backdropFilter: "blur(12px)",
-    flexWrap: "wrap",
     gap: 12,
   },
 
   brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
+    ...appNavbarStyles.brand,
     flexWrap: "wrap",
   },
 
-  logoImg: {
-    width: 76,
-    height: 52,
-    objectFit: "contain",
-  },
+  logoImg: appNavbarStyles.logoImg,
 
   brandTitle: {
-    fontWeight: 800,
-    fontSize: 20,
-    letterSpacing: -0.3,
+    ...appNavbarStyles.brandTitle,
     lineHeight: 1.1,
   },
 
-  brandSub: {
-    fontSize: 12,
-    marginTop: 3,
-  },
+  brandSub: appNavbarStyles.brandSub,
 
   main: {
     flex: 1,

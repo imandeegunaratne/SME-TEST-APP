@@ -1,11 +1,22 @@
 @import "tailwindcss";
-  
 
 /* Small app-specific defaults */
-html, body {
+html, body, #root {
   height: 100%;
 }
 
 body {
   margin: 0;
+  font-family: "Inter", Arial, sans-serif;
+  font-size: 14px;
+  color: #0F172A;
+  background: #F4F7FB;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
 }

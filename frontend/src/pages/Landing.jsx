@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import logo from "../assets/logo.png";
+import { appNavbarStyles, appShellStyles, createAppTheme } from "../styles/appTheme";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function Landing() {
     return () => clearInterval(interval);
   }, []);
 
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = createAppTheme(dark, dark ? darkTheme : lightTheme);
 
   const features = [
   { title: "Business model assessment" },
@@ -307,50 +308,26 @@ const lightTheme = {
 
 const styles = {
   page: {
-    minHeight: "100vh",
+    ...appShellStyles.page,
     width: "100%",
     display: "flex",
     flexDirection: "column",
     overflowX: "hidden",
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   },
 
   navbar: {
-    position: "sticky",
-    top: 0,
-    zIndex: 50,
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px 5%",
-    backdropFilter: "blur(12px)",
-    flexWrap: "wrap",
+    ...appNavbarStyles.shell,
+    ...appNavbarStyles.flexShell,
     gap: 12,
   },
 
-  brand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    cursor: "pointer",
-  },
+  brand: appNavbarStyles.brand,
 
-  logoImg: {
-    width: 100,
-    height: 72,
-    objectFit: "contain",
-  },
+  logoImg: appNavbarStyles.logoImg,
 
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: 800,
-    lineHeight: 1.1,
-  },
+  brandTitle: { ...appNavbarStyles.brandTitle, lineHeight: 1.1 },
 
-  brandSub: {
-    fontSize: 12  ,
-    marginTop: 3,
-  },
+  brandSub: appNavbarStyles.brandSub,
 
   navActions: {
     display: "flex",

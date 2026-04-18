@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { authPageStyles, getAuthTheme } from "../styles/authStyles";
 
 export default function Login() {
   const navigate = useNavigate();
 
   // Fixed: theme read inside useState so it doesn't freeze on mount
   const [dark] = useState(() => localStorage.getItem("theme") === "dark");
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = getAuthTheme(dark, {
+    muted: dark ? "rgba(255,255,255,0.7)" : "#64748B",
+  });
 
   const [form, setForm] = useState({ username: "", password: "" });
   const [err, setErr] = useState("");
@@ -113,11 +116,14 @@ export default function Login() {
             required
           />
 
-          <button disabled={loading} style={styles.button}>
+          <button
+            disabled={loading}
+            style={{ ...styles.button, background: theme.primary }}
+          >
             {loading ? "Signing in..." : "Login"}
           </button>
 
-          {err && <div style={styles.error}>{err}</div>}
+          {err && <div style={{ ...styles.error, color: theme.errorText }}>{err}</div>}
 
           <button type="button" onClick={() => navigate("/")} style={styles.link}>
             Back to Home
@@ -136,36 +142,11 @@ export default function Login() {
   );
 }
 
-const lightTheme = {
-  bg: "#F4F8FB",
-  card: "#FFFFFF",
-  text: "#0F172A",
-  muted: "#64748B",
-  border: "#E2E8F0",
-  inputBg: "#FFFFFF",
-};
-
-const darkTheme = {
-  bg: "#071423",
-  card: "rgba(255,255,255,0.06)",
-  text: "#FFFFFF",
-  muted: "rgba(255,255,255,0.7)",
-  border: "rgba(255,255,255,0.14)",
-  inputBg: "rgba(255,255,255,0.04)",
-};
-
 const styles = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
+  page: authPageStyles.page,
   card: {
-    width: "100%",
+    ...authPageStyles.card,
     maxWidth: 420,
-    padding: 30,
     borderRadius: 16,
     boxShadow: "0 20px 40px rgba(0,0,0,0.12)",
   },
@@ -178,38 +159,9 @@ const styles = {
     marginBottom: 20,
     fontSize: 15,
   },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  input: {
-    padding: 12,
-    borderRadius: 10,
-    outline: "none",
-    fontSize: 15,
-  },
-  button: {
-    padding: 12,
-    borderRadius: 10,
-    border: "none",
-    background: "#2F96B4",
-    color: "white",
-    fontWeight: 700,
-    cursor: "pointer",
-    fontSize: 15,
-  },
-  link: {
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    color: "#2F96B4",
-    fontSize: 14,
-    textAlign: "left",
-    padding: 0,
-  },
-  error: {
-    color: "#DC2626",
-    fontSize: 14,
-  },
+  form: authPageStyles.form,
+  input: authPageStyles.input,
+  button: authPageStyles.button,
+  link: { ...authPageStyles.link, color: "#2F96B4" },
+  error: authPageStyles.error,
 };

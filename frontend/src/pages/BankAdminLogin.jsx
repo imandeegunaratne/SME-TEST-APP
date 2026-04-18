@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { authPageStyles, getAuthTheme } from "../styles/authStyles";
 
 export default function BankAdminLogin() {
   const navigate = useNavigate();
@@ -17,7 +18,17 @@ export default function BankAdminLogin() {
 
   // Fixed: theme read inside useState so it doesn't freeze on mount
   const [dark] = useState(() => localStorage.getItem("theme") === "dark");
-  const theme = dark ? darkTheme : lightTheme;
+  const theme = getAuthTheme(dark, {
+    bg: dark ? "#0B1220" : "#F4F8FB",
+    card: dark ? "#172033" : "#FFFFFF",
+    mutedText: dark ? "rgba(255,255,255,0.78)" : "rgba(15,23,42,0.68)",
+    shadow: dark
+      ? "0 16px 32px rgba(0,0,0,0.18)"
+      : "0 16px 32px rgba(15,23,42,0.08)",
+    errorBg: dark ? "rgba(239,68,68,0.10)" : "rgba(239,68,68,0.08)",
+    errorBorder: dark ? "rgba(239,68,68,0.24)" : "rgba(239,68,68,0.20)",
+    errorText: dark ? "#FCA5A5" : "#B91C1C",
+  });
 
   const [form, setForm] = useState({ username: "", password: "" });
   const [err, setErr] = useState("");
@@ -170,43 +181,11 @@ export default function BankAdminLogin() {
   );
 }
 
-const lightTheme = {
-  bg: "#F4F8FB",
-  text: "#0F172A",
-  card: "#FFFFFF",
-  border: "#E2E8F0",
-  primary: "#2F96B4",
-  mutedText: "rgba(15,23,42,0.68)",
-  inputBg: "#FFFFFF",
-  link: "#2F96B4",
-  shadow: "0 16px 32px rgba(15,23,42,0.08)",
-  errorBg: "rgba(239,68,68,0.08)",
-  errorBorder: "rgba(239,68,68,0.20)",
-  errorText: "#B91C1C",
-};
-
-const darkTheme = {
-  bg: "#0B1220",
-  text: "#FFFFFF",
-  card: "#172033",
-  border: "rgba(255,255,255,0.10)",
-  primary: "#2F96B4",
-  mutedText: "rgba(255,255,255,0.78)",
-  inputBg: "rgba(255,255,255,0.03)",
-  link: "#7DD3FC",
-  shadow: "0 16px 32px rgba(0,0,0,0.18)",
-  errorBg: "rgba(239,68,68,0.10)",
-  errorBorder: "rgba(239,68,68,0.24)",
-  errorText: "#FCA5A5",
-};
-
 const styles = {
   page: {
-    minHeight: "100vh",
+    ...authPageStyles.page,
     width: "100vw",
-    display: "flex",
     flexDirection: "column",
-    boxSizing: "border-box",
     fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   },
   centerWrap: {
@@ -216,41 +195,30 @@ const styles = {
     justifyContent: "center",
     padding: "24px 5%",
   },
-  card: {
-    width: "min(460px, 100%)",
-    borderRadius: 20,
-    padding: "28px 24px",
-  },
+  card: { ...authPageStyles.card, width: "min(460px, 100%)", borderRadius: 20, padding: "28px 24px" },
   h2: { margin: 0, fontSize: 22, fontWeight: 800 },
   sub: { marginTop: 8, marginBottom: 20, fontSize: 14, lineHeight: 1.6 },
-  form: { display: "grid", gap: 10 },
+  form: { ...authPageStyles.form, display: "grid", gap: 10 },
   label: { fontSize: 14, fontWeight: 600, marginTop: 2 },
   input: {
+    ...authPageStyles.input,
     height: 46,
     borderRadius: 12,
     padding: "0 14px",
-    outline: "none",
     fontSize: 14,
   },
   primaryBtn: {
+    ...authPageStyles.button,
     marginTop: 8,
     height: 46,
-    border: "none",
     borderRadius: 12,
-    color: "#fff",
-    fontWeight: 700,
-    cursor: "pointer",
     fontSize: 15,
   },
   link: {
+    ...authPageStyles.link,
     marginTop: 6,
-    border: "none",
-    background: "transparent",
-    padding: 0,
     textAlign: "left",
     fontWeight: 600,
-    cursor: "pointer",
-    fontSize: 14,
   },
   errorBox: {
     marginTop: 6,
