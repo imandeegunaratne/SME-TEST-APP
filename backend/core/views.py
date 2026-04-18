@@ -104,7 +104,14 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
     rows = []
     total = Decimal("0")
 
-    for code, w in weights_by_code.items():
+    for code, weight_meta in weights_by_code.items():
+        if isinstance(weight_meta, dict):
+            w = weight_meta.get("weight", Decimal("0"))
+            title = weight_meta.get("title", code)
+        else:
+            w = weight_meta
+            title = code
+
         raw = scores_by_code.get(code)
         score = raw.get("score") if isinstance(raw, dict) else None
 
@@ -119,6 +126,7 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
 
         rows.append({
             "code": code,
+            "title": title,
             "weight": float(w),
             "score": score,
             "normalized": float(normalized) if normalized is not None else None,
@@ -134,6 +142,14 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
         row["rank"] = i
 
     return float(capability), rows, weaknesses
+
+
+def _criterion_code_sort_key(code):
+    text = str(code or "")
+    prefix = "".join(ch for ch in text if ch.isalpha())
+    digits = "".join(ch for ch in text if ch.isdigit())
+    number = int(digits) if digits else 0
+    return (prefix, number, text)
 
 
 def _serialize_sme_basic(sme):
@@ -692,14 +708,20 @@ class SMESubmitCapabilityView(APIView):
             sme.evaluator = profile.user
             sme.save(update_fields=["evaluator"])
 
-        weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
+        weights = sorted(
+            CriterionWeight.objects.filter(is_active=True),
+            key=lambda item: _criterion_code_sort_key(item.code),
+        )
         if not weights.exists():
             return Response(
                 {"detail": "No weights found. Insert CriterionWeight rows first."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
+        weights_by_code = {
+            w.code: {"weight": Decimal(str(w.weight)), "title": w.title}
+            for w in weights
+        }
         score_rows = SMECriterionScore.objects.filter(sme=sme, evaluator=profile.user)
         scores_by_code = {
             s.criterion_code: {"score": s.score, "notes": s.notes, "followup": s.followup}
@@ -749,14 +771,20 @@ class SMECapabilityResultView(APIView):
         if block:
             return block
 
-        weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
+        weights = sorted(
+            CriterionWeight.objects.filter(is_active=True),
+            key=lambda item: _criterion_code_sort_key(item.code),
+        )
         if not weights.exists():
             return Response(
                 {"detail": "No weights found. Insert CriterionWeight rows first."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
+        weights_by_code = {
+            w.code: {"weight": Decimal(str(w.weight)), "title": w.title}
+            for w in weights
+        }
         score_rows = SMECriterionScore.objects.filter(sme=sme, evaluator=profile.user)
         scores_by_code = {
             s.criterion_code: {"score": s.score, "notes": s.notes, "followup": s.followup}

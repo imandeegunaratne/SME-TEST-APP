@@ -1,0 +1,43 @@
+const BRAND = "#2F96B4";
+
+export const darkTheme = {
+  bg: "#0B1220",
+  navBg: "rgba(16,24,38,0.92)",
+  card: "#172033",
+  resultBg: "#111827",
+  inputBg: "#0f172a",
+  text: "#ffffff",
+  subText: "rgba(255,255,255,0.72)",
+  button: BRAND,
+  buttonText: "#FFFFFF",
+  border: "rgba(255,255,255,0.10)",
+  borderStrong: "rgba(255,255,255,0.18)",
+  iconBg1: "rgba(59,130,246,0.16)",
+  errorBg: "rgba(220,38,38,0.10)",
+  errorText: "#fecaca",
+  errorBorder: "rgba(220,38,38,0.30)",
+  tabActiveBg: "rgba(47,150,180,0.12)",
+  tabActiveBorder: "rgba(47,150,180,0.24)",
+  heroGlow: "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.18), transparent 65%)",
+};
+
+export const lightTheme = {
+  bg: "#F4F7FB",
+  navBg: "rgba(255,255,255,0.92)",
+  card: "#ffffff",
+  resultBg: "#F8FAFC",
+  inputBg: "#ffffff",
+  text: "#0F172A",
+  subText: "#475569",
+  button: BRAND,
+  buttonText: "#FFFFFF",
+  border: "rgba(15,23,42,0.10)",
+  borderStrong: "rgba(15,23,42,0.18)",
+  iconBg1: "rgba(59,130,246,0.12)",
+  errorBg: "#FEF2F2",
+  errorText: "#B91C1C",
+  errorBorder: "#FECACA",
+  tabActiveBg: "rgba(47,150,180,0.08)",
+  tabActiveBorder: "rgba(47,150,180,0.18)",
+  heroGlow: "radial-gradient(900px 420px at 50% 10%, rgba(47,150,180,0.14), transparent 65%)",
+};

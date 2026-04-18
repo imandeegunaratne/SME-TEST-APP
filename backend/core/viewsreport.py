@@ -12,7 +12,12 @@ from rest_framework.views import APIView
 
 from .models import CriterionWeight, SME, SMECriterionScore
 from .permission import IsApprovedUser
-from .views import _compute_capability_excel, _get_evaluator_profile_or_403, _get_sme_or_404
+from .views import (
+    _compute_capability_excel,
+    _criterion_code_sort_key,
+    _get_evaluator_profile_or_403,
+    _get_sme_or_404,
+)
 
 
 class SMEReportView(APIView):
@@ -31,8 +36,14 @@ class SMEReportView(APIView):
         if not sme.is_scored:
             return Response({"detail": "Report not completed yet."}, status=status.HTTP_403_FORBIDDEN)
 
-        weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
-        weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
+        weights = sorted(
+            CriterionWeight.objects.filter(is_active=True),
+            key=lambda item: _criterion_code_sort_key(item.code),
+        )
+        weights_by_code = {
+            w.code: {"weight": Decimal(str(w.weight)), "title": w.title}
+            for w in weights
+        }
 
         score_rows = SMECriterionScore.objects.filter(sme=sme).order_by("criterion_code")
         scores_by_code = {
@@ -78,8 +89,14 @@ class SMEReportPDFView(APIView):
         if not sme:
             return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        weights = CriterionWeight.objects.filter(is_active=True).order_by("code")
-        weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
+        weights = sorted(
+            CriterionWeight.objects.filter(is_active=True),
+            key=lambda item: _criterion_code_sort_key(item.code),
+        )
+        weights_by_code = {
+            w.code: {"weight": Decimal(str(w.weight)), "title": w.title}
+            for w in weights
+        }
 
         score_rows = SMECriterionScore.objects.filter(sme=sme).order_by("criterion_code")
         scores_by_code = {
@@ -133,7 +150,8 @@ class SMEReportPDFView(APIView):
                 pdf.setFont("Helvetica", 9)
 
             pdf.drawString(20 * mm, y, str(row.get("code", "")))
-            pdf.drawString(35 * mm, y, str(row.get("code", "")))
+            criterion_title = str(row.get("title") or row.get("code", ""))
+            pdf.drawString(35 * mm, y, criterion_title[:42])
             pdf.drawString(130 * mm, y, str(row.get("score", "—")))
             pdf.drawString(
                 150 * mm, y,
