@@ -1,0 +1,218 @@
+import { useEffect, useMemo, useState } from "react";
+
+export function useBankAdminDashboard(navigate) {
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    return saved ? saved === "dark" : true;
+  });
+  const [activeTab, setActiveTab] = useState("approval");
+  const [pending, setPending] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [industryData, setIndustryData] = useState([]);
+  const [evaluatorData, setEvaluatorData] = useState(null);
+  const [criterionData, setCriterionData] = useState([]);
+  const [smes, setSmes] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [comparisonData, setComparisonData] = useState([]);
+  const [selectedEvaluatorId, setSelectedEvaluatorId] = useState("");
+  const [selectedEvaluatorData, setSelectedEvaluatorData] = useState(null);
+  const [selectedEvaluatorLoading, setSelectedEvaluatorLoading] = useState(false);
+  const [selectedIndustry, setSelectedIndustry] = useState("");
+  const [selectedCriterion] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [searchEvaluator, setSearchEvaluator] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
+  async function apiGet(url) {
+    const token = localStorage.getItem("token");
+    const res = await fetch(url, {
+      headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
+    });
+    let data = null;
+    let text = "";
+    try { data = await res.json(); } catch { try { text = await res.text(); } catch { text = ""; } }
+    if (!res.ok) throw new Error(data?.detail || data?.message || data?.error || text || `Request failed with status ${res.status}`);
+    return data;
+  }
+
+  async function apiPost(url, body = {}) {
+    const token = localStorage.getItem("token");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.detail || data?.message || data?.error || `Request failed with status ${res.status}`);
+    return data;
+  }
+
+  async function fetchPending() {
+    try {
+      setError("");
+      setLoading(true);
+      const data = await apiGet("/api/bank-admin/pending-evaluators/");
+      setPending(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchAnalysisData() {
+    try {
+      setError("");
+      setAnalysisLoading(true);
+      const [summaryRes, industryRes, evaluatorRes, criterionRes, smeRes] = await Promise.all([
+        apiGet("/api/bank-admin/dashboard-summary/"),
+        apiGet("/api/bank-admin/industry-analysis/"),
+        apiGet("/api/bank-admin/evaluator-analysis/"),
+        apiGet("/api/bank-admin/criterion-analysis/"),
+        apiGet("/api/bank-admin/smes/"),
+      ]);
+      setSummary(summaryRes || null);
+      setIndustryData(Array.isArray(industryRes) ? industryRes : []);
+      setEvaluatorData(evaluatorRes || null);
+      setCriterionData(Array.isArray(criterionRes) ? criterionRes : []);
+      setSmes(Array.isArray(smeRes) ? smeRes : []);
+    } catch (err) {
+      setError(err.message || "Failed to load analysis.");
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }
+
+  async function fetchComparison(ids) {
+    try {
+      setError("");
+      const data = await apiGet(`/api/bank-admin/sme-comparison/?ids=${ids.join(",")}`);
+      setComparisonData(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Failed to load comparison.");
+    }
+  }
+
+  async function fetchEvaluatorDistribution(evaluatorId) {
+    try {
+      setError("");
+      setSelectedEvaluatorLoading(true);
+      const data = await apiGet(`/api/bank-admin/evaluator-score-distribution/${evaluatorId}/`);
+      setSelectedEvaluatorData(data || null);
+    } catch (err) {
+      setError(err.message || "Failed to load evaluator distribution.");
+      setSelectedEvaluatorData(null);
+    } finally {
+      setSelectedEvaluatorLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchPending();
+    fetchAnalysisData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedIds.length >= 2) fetchComparison(selectedIds);
+    else setComparisonData([]);
+  }, [selectedIds]);
+
+  useEffect(() => {
+    if (selectedEvaluatorId) fetchEvaluatorDistribution(selectedEvaluatorId);
+    else setSelectedEvaluatorData(null);
+  }, [selectedEvaluatorId]);
+
+  async function runAction(profileId, actionPath, successText, refreshSearch = false) {
+    try {
+      setError("");
+      setSuccessMsg("");
+      setActionLoadingId(profileId);
+      await apiPost(actionPath);
+      setSuccessMsg(successText);
+      fetchPending();
+      fetchAnalysisData();
+      if (refreshSearch && searchEvaluator.trim()) handleSearchEvaluator();
+    } catch (err) {
+      setError(err.message || "Action failed.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function handleSearchEvaluator() {
+    try {
+      setError("");
+      setSuccessMsg("");
+      setSearchLoading(true);
+      if (!searchEvaluator.trim()) {
+        setSearchResults([]);
+        return;
+      }
+      const data = await apiGet(`/api/bank-admin/search-evaluators/?q=${encodeURIComponent(searchEvaluator.trim())}`);
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Search failed.");
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
+  function toggleSme(id) {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
+  }
+
+  function logout() {
+    localStorage.clear();
+    navigate("/");
+  }
+
+  function getBarHeight(value, max = 10) {
+    const score = Number(value || 0);
+    const top = Number(max || 10);
+    if (top <= 0) return "6%";
+    return `${Math.max((score / top) * 100, 6)}%`;
+  }
+
+  const selectedIndustryData = useMemo(
+    () => industryData.find((item) => item.industry === selectedIndustry) || null,
+    [industryData, selectedIndustry]
+  );
+  const selectedCriterionData = useMemo(
+    () => criterionData.find((item) => item.criterion_code === selectedCriterion) || null,
+    [criterionData, selectedCriterion]
+  );
+  const industryMaxScore = useMemo(() => {
+    if (!selectedIndustryData?.smes?.length) return 10;
+    return Math.max(...selectedIndustryData.smes.map((s) => Number(s.total_score || 0))) || 10;
+  }, [selectedIndustryData]);
+  const criterionMaxScore = useMemo(() => {
+    if (!selectedCriterionData?.scores?.length) return 10;
+    return Math.max(...selectedCriterionData.scores.map((s) => Number(s.score || 0))) || 10;
+  }, [selectedCriterionData]);
+
+  return {
+    dark, setDark, activeTab, setActiveTab, pending, summary, industryData, evaluatorData, criterionData, smes,
+    selectedIds, comparisonData, selectedEvaluatorId, setSelectedEvaluatorId, selectedEvaluatorData, selectedEvaluatorLoading,
+    selectedIndustry, setSelectedIndustry, loading, analysisLoading, actionLoadingId, error, successMsg,
+    searchEvaluator, setSearchEvaluator, searchResults, searchLoading, selectedIndustryData, industryMaxScore,
+    criterionMaxScore, getBarHeight, toggleSme, logout, handleSearchEvaluator,
+    approve: (id) => runAction(id, `/api/bank-admin/approve-evaluator/${id}/`, "Evaluator approved successfully.", true),
+    disapprove: (id) => runAction(id, `/api/bank-admin/disapprove-evaluator/${id}/`, "Evaluator disapproved and blocked successfully.", true),
+    blockEvaluator: (id) => runAction(id, `/api/bank-admin/block-evaluator/${id}/`, "Evaluator blocked successfully.", true),
+    unblockEvaluator: (id) => runAction(id, `/api/bank-admin/unblock-evaluator/${id}/`, "Evaluator unblocked successfully.", true),
+  };
+}
