@@ -42,7 +42,7 @@ export default function EvaluatorHeader(props) {
             }}
             style={{ ...styles.iconBtn, background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
           >
-            ðŸ””
+            {"\u{1F514}"}
             {unreadCount > 0 && <span style={styles.badge}>{unreadCount}</span>}
           </button>
           {showNotifications && (

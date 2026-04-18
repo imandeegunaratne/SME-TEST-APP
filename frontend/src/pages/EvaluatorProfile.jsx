@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { appNavbarStyles, appShellStyles, createAppTheme } from "../styles/appTheme";
+import { appShellStyles, createAppTheme } from "../styles/appTheme";
 
 export default function EvaluatorProfile() {
   const navigate = useNavigate();
-
   const [dark] = useState(() => localStorage.getItem("theme") === "dark");
   const theme = createAppTheme(dark, dark ? darkTheme : lightTheme);
-
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
   const [passwordForm, setPasswordForm] = useState({
     old_password: "",
     new_password: "",
@@ -19,16 +16,16 @@ export default function EvaluatorProfile() {
   });
   const [passwordMsg, setPasswordMsg] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
-
   const token = localStorage.getItem("token") || "";
   const username = localStorage.getItem("username") || "Evaluator";
-  const bankName = localStorage.getItem("bank_name") || "—";
+  const bankName = localStorage.getItem("bank_name") || "â€”";
   const role = localStorage.getItem("role") || "EVALUATOR";
 
   useEffect(() => {
-    if (!token) { navigate("/login", { replace: true }); return; }
-
-    // Fetch summary to show live stats alongside static profile data
+    if (!token) {
+      navigate("/login", { replace: true });
+      return;
+    }
     (async () => {
       setLoading(true);
       try {
@@ -59,7 +56,6 @@ export default function EvaluatorProfile() {
   async function handleChangePassword(e) {
     e.preventDefault();
     setPasswordMsg("");
-
     if (!passwordForm.old_password || !passwordForm.new_password || !passwordForm.confirm_password) {
       setPasswordMsg("Please fill all fields.");
       return;
@@ -68,7 +64,6 @@ export default function EvaluatorProfile() {
       setPasswordMsg("New passwords do not match.");
       return;
     }
-
     setPasswordSaving(true);
     try {
       const res = await fetch("/api/change-password/", {
@@ -84,7 +79,6 @@ export default function EvaluatorProfile() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || "Failed to change password.");
-
       setPasswordMsg("Password changed. You will be logged out in 2 seconds.");
       setTimeout(() => {
         localStorage.clear();
@@ -99,30 +93,11 @@ export default function EvaluatorProfile() {
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      <header
-        style={{
-          ...styles.navbar,
-          background: theme.navBg,
-          borderBottom: `1px solid ${theme.border}`,
-        }}
-      >
-        <button
-          onClick={() => navigate("/evaluator-home")}
-          style={{ ...styles.backBtn, background: "#2F96B4", color: "#fff" }}
-        >
-          ← Back
-        </button>
-        <span style={{ fontWeight: 800, fontSize: 18 }}>My Profile</span>
-        <div />
-      </header>
-
       <main style={styles.main}>
         {err && <div style={{ ...styles.alert, background: theme.errorBg, color: theme.errorText }}>{err}</div>}
 
-        {/* Profile card */}
         <div style={{ ...styles.card, background: theme.card, border: `1px solid ${theme.border}` }}>
           <h2 style={{ margin: "0 0 18px", fontSize: 22, fontWeight: 800 }}>Account Information</h2>
-
           <div style={styles.infoGrid}>
             {[
               ["Username", username],
@@ -134,14 +109,13 @@ export default function EvaluatorProfile() {
                 <div style={styles.infoValue}>{value}</div>
               </div>
             ))}
-
             {!loading && profile && (
               <>
                 {[
-                  ["Total SMEs", profile.total_smes ?? "—"],
-                  ["Scored SMEs", profile.scored_smes ?? "—"],
-                  ["Pending SMEs", profile.pending_smes ?? "—"],
-                  ["Average Score", profile.avg_score ?? "—"],
+                  ["Total SMEs", profile.total_smes ?? "â€”"],
+                  ["Scored SMEs", profile.scored_smes ?? "â€”"],
+                  ["Pending SMEs", profile.pending_smes ?? "â€”"],
+                  ["Average Score", profile.avg_score ?? "â€”"],
                 ].map(([label, value]) => (
                   <div key={label} style={{ ...styles.infoRow, borderBottom: `1px solid ${theme.border}` }}>
                     <div style={{ ...styles.infoLabel, color: theme.muted }}>{label}</div>
@@ -150,19 +124,12 @@ export default function EvaluatorProfile() {
                 ))}
               </>
             )}
-
-            {loading && (
-              <div style={{ padding: "12px 0", color: theme.muted, fontSize: 14 }}>
-                Loading activity data...
-              </div>
-            )}
+            {loading && <div style={{ padding: "12px 0", color: theme.muted, fontSize: 14 }}>Loading activity data...</div>}
           </div>
         </div>
 
-        {/* Change password card */}
         <div style={{ ...styles.card, background: theme.card, border: `1px solid ${theme.border}`, marginTop: 20 }}>
           <h2 style={{ margin: "0 0 18px", fontSize: 22, fontWeight: 800 }}>Change Password</h2>
-
           <form onSubmit={handleChangePassword} style={styles.form}>
             {[
               { name: "old_password", label: "Current Password" },
@@ -177,33 +144,16 @@ export default function EvaluatorProfile() {
                   value={passwordForm[name]}
                   onChange={onPasswordInput}
                   autoComplete={name === "old_password" ? "current-password" : "new-password"}
-                  style={{
-                    ...styles.input,
-                    background: theme.inputBg,
-                    color: theme.text,
-                    border: `1px solid ${theme.border}`,
-                  }}
+                  style={{ ...styles.input, background: theme.inputBg, color: theme.text, border: `1px solid ${theme.border}` }}
                 />
               </div>
             ))}
-
             {passwordMsg && (
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: passwordMsg.includes("changed") ? "#16a34a" : "#dc2626",
-                }}
-              >
+              <div style={{ fontSize: 14, fontWeight: 600, color: passwordMsg.includes("changed") ? "#16a34a" : "#dc2626" }}>
                 {passwordMsg}
               </div>
             )}
-
-            <button
-              type="submit"
-              disabled={passwordSaving}
-              style={{ ...styles.btn, background: "#2F96B4", color: "#fff" }}
-            >
+            <button type="submit" disabled={passwordSaving} style={{ ...styles.btn, background: "#2F96B4", color: "#fff" }}>
               {passwordSaving ? "Updating..." : "Update Password"}
             </button>
           </form>
@@ -226,14 +176,6 @@ const darkTheme = {
 
 const styles = {
   page: appShellStyles.page,
-  navbar: {
-    ...appNavbarStyles.shell,
-    display: "grid",
-    gridTemplateColumns: "auto 1fr auto",
-    alignItems: "center",
-    gap: 16,
-  },
-  backBtn: appNavbarStyles.backBtn,
   main: { width: "min(680px, 92%)", margin: "32px auto", paddingBottom: 40 },
   alert: { padding: "14px 16px", borderRadius: 12, marginBottom: 16, fontWeight: 600 },
   card: { borderRadius: 20, padding: 24, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" },
