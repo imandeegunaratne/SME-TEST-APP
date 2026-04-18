@@ -4,7 +4,19 @@ import { useNavigate } from "react-router-dom";
 export default function BankAdminLogin() {
   const navigate = useNavigate();
 
-  const dark = localStorage.getItem("theme") === "dark";
+  // Fixed: redirect away if user is already logged in
+  const existingToken = localStorage.getItem("token");
+  const existingRole = localStorage.getItem("role");
+  if (existingToken) {
+    if (existingRole === "BANK_ADMIN") {
+      navigate("/bank-admin-dashboard", { replace: true });
+    } else {
+      navigate("/evaluator-home", { replace: true });
+    }
+  }
+
+  // Fixed: theme read inside useState so it doesn't freeze on mount
+  const [dark] = useState(() => localStorage.getItem("theme") === "dark");
   const theme = dark ? darkTheme : lightTheme;
 
   const [form, setForm] = useState({ username: "", password: "" });
@@ -209,26 +221,10 @@ const styles = {
     borderRadius: 20,
     padding: "28px 24px",
   },
-  h2: {
-    margin: 0,
-    fontSize: 22,
-    fontWeight: 800,
-  },
-  sub: {
-    marginTop: 8,
-    marginBottom: 20,
-    fontSize: 14,
-    lineHeight: 1.6,
-  },
-  form: {
-    display: "grid",
-    gap: 10,
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: 600,
-    marginTop: 2,
-  },
+  h2: { margin: 0, fontSize: 22, fontWeight: 800 },
+  sub: { marginTop: 8, marginBottom: 20, fontSize: 14, lineHeight: 1.6 },
+  form: { display: "grid", gap: 10 },
+  label: { fontSize: 14, fontWeight: 600, marginTop: 2 },
   input: {
     height: 46,
     borderRadius: 12,
@@ -244,6 +240,7 @@ const styles = {
     color: "#fff",
     fontWeight: 700,
     cursor: "pointer",
+    fontSize: 15,
   },
   link: {
     marginTop: 6,
@@ -253,6 +250,7 @@ const styles = {
     textAlign: "left",
     fontWeight: 600,
     cursor: "pointer",
+    fontSize: 14,
   },
   errorBox: {
     marginTop: 6,

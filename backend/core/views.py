@@ -12,19 +12,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import (
-    EvaluatorNotification,
-    Profile,
-    SME,
-    CriterionWeight,
-    SMECriterionScore,
-)
+from .models import EvaluatorNotification, Profile, SME, CriterionWeight, SMECriterionScore
 from .permission import IsBankAdmin, IsApprovedUser
-from .serializers import (
-    SMEListSerializer,
-    EvaluatorSignupSerializer,
-    EvaluatorNotificationSerializer,
-)
+from .serializers import SMEListSerializer, EvaluatorSignupSerializer, EvaluatorNotificationSerializer
 
 
 # ==========================
@@ -38,17 +28,12 @@ def health(request):
 # ==========================
 # Helpers
 # ==========================
-def _is_bank_admin(user):
-    return hasattr(user, "profile") and user.profile.role == "BANK_ADMIN"
-
-
 def _get_evaluator_profile_or_403(request):
     """
-    Token-based evaluator guard:
-    - must be authenticated
-    - must have profile
-    - must be evaluator
-    - must be approved + active
+    Secondary role guard used inside view bodies.
+    IsApprovedUser permission class is the primary gate;
+    this helper provides the profile object and a clear error
+    when the role check needs to be more specific.
     """
     user = getattr(request, "user", None)
 
@@ -84,8 +69,7 @@ def _get_evaluator_profile_or_403(request):
 def _get_sme_or_404(pk, bank):
     try:
         return SME.objects.select_related("evaluator", "scored_by", "bank").get(
-            pk=pk,
-            bank=bank,
+            pk=pk, bank=bank
         )
     except SME.DoesNotExist:
         return None
@@ -103,9 +87,7 @@ def _block_if_scored_by_other(sme, evaluator_user):
 def _block_if_assigned_to_other_evaluator(sme, evaluator_user):
     if not sme.is_scored and sme.evaluator and sme.evaluator != evaluator_user:
         return Response(
-            {
-                "detail": f"Access denied. {sme.evaluator.username} should complete the evaluation."
-            },
+            {"detail": f"Access denied. {sme.evaluator.username} should complete the evaluation."},
             status=status.HTTP_403_FORBIDDEN,
         )
     return None
@@ -113,7 +95,7 @@ def _block_if_assigned_to_other_evaluator(sme, evaluator_user):
 
 def _compute_capability_excel(scores_by_code, weights_by_code):
     """
-    Excel logic:
+    Excel-style capability calculation:
       normalized = score / 10
       weighted   = weight * normalized
       gap        = weight * (1 - normalized)
@@ -127,9 +109,7 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
         score = raw.get("score") if isinstance(raw, dict) else None
 
         if score is None:
-            normalized = None
-            weighted = None
-            gap = None
+            normalized = weighted = gap = None
         else:
             s = Decimal(str(score))
             normalized = s / Decimal("10")
@@ -137,22 +117,19 @@ def _compute_capability_excel(scores_by_code, weights_by_code):
             gap = w * (Decimal("1") - normalized)
             total += weighted
 
-        rows.append(
-            {
-                "code": code,
-                "weight": float(w),
-                "score": score,
-                "normalized": float(normalized) if normalized is not None else None,
-                "weighted": float(weighted) if weighted is not None else None,
-                "gap": float(gap) if gap is not None else None,
-            }
-        )
+        rows.append({
+            "code": code,
+            "weight": float(w),
+            "score": score,
+            "normalized": float(normalized) if normalized is not None else None,
+            "weighted": float(weighted) if weighted is not None else None,
+            "gap": float(gap) if gap is not None else None,
+        })
 
     capability = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     weaknesses = [r for r in rows if r.get("gap") is not None and r["gap"] > 0]
     weaknesses.sort(key=lambda x: x["gap"], reverse=True)
-
     for i, row in enumerate(weaknesses, start=1):
         row["rank"] = i
 
@@ -206,10 +183,7 @@ class LoginView(APIView):
         try:
             profile = user.profile
         except Profile.DoesNotExist:
-            return Response(
-                {"detail": "Profile not found."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return Response({"detail": "Profile not found."}, status=status.HTTP_403_FORBIDDEN)
 
         if not user.is_active:
             return Response(
@@ -230,22 +204,17 @@ class LoginView(APIView):
                 )
 
         if profile.role == "BANK_ADMIN" and not profile.is_active:
-            return Response(
-                {"detail": "Your account is inactive."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return Response({"detail": "Your account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
         token, _ = Token.objects.get_or_create(user=user)
 
-        return Response(
-            {
-                "token": token.key,
-                "role": profile.role,
-                "username": user.username,
-                "bank_name": profile.bank.name if profile.bank else "",
-                "bank_code": profile.bank.code if profile.bank else "",
-            }
-        )
+        return Response({
+            "token": token.key,
+            "role": profile.role,
+            "username": user.username,
+            "bank_name": profile.bank.name if profile.bank else "",
+            "bank_code": profile.bank.code if profile.bank else "",
+        })
 
 
 class ChangePasswordView(APIView):
@@ -263,27 +232,21 @@ class ChangePasswordView(APIView):
             )
 
         if not user.check_password(old_password):
-            return Response(
-                {"detail": "Old password is incorrect."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Old password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             validate_password(new_password, user=user)
         except Exception as e:
             errors = e.messages if hasattr(e, "messages") else [str(e)]
-            return Response(
-                {"detail": " ".join(errors)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": " ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(new_password)
         user.save()
 
-        return Response(
-            {"detail": "Password changed successfully."},
-            status=status.HTTP_200_OK,
-        )
+        # Invalidate existing token so the user must log in again with the new password
+        Token.objects.filter(user=user).delete()
+
+        return Response({"detail": "Password changed successfully. Please log in again."})
 
 
 # ==========================
@@ -294,13 +257,11 @@ class PendingEvaluatorsView(APIView):
 
     def get(self, request):
         bank = request.user.profile.bank
-
         pending = (
             Profile.objects.filter(bank=bank, role="EVALUATOR", is_approved=False)
             .select_related("user")
             .order_by("-id")
         )
-
         data = [
             {
                 "profile_id": p.id,
@@ -314,8 +275,7 @@ class PendingEvaluatorsView(APIView):
             }
             for p in pending
         ]
-
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(data)
 
 
 class ApproveEvaluatorView(APIView):
@@ -323,12 +283,9 @@ class ApproveEvaluatorView(APIView):
 
     def post(self, request, profile_id):
         bank = request.user.profile.bank
-
         try:
             profile = Profile.objects.select_related("user").get(
-                id=profile_id,
-                bank=bank,
-                role="EVALUATOR",
+                id=profile_id, bank=bank, role="EVALUATOR"
             )
         except Profile.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -336,7 +293,6 @@ class ApproveEvaluatorView(APIView):
         profile.is_approved = True
         profile.is_active = True
         profile.user.is_active = True
-
         profile.user.save(update_fields=["is_active"])
         profile.save(update_fields=["is_approved", "is_active"])
 
@@ -345,8 +301,7 @@ class ApproveEvaluatorView(APIView):
             title="Account Approved",
             message="Your evaluator account has been approved. You can now log in and start using the system.",
         )
-
-        return Response({"detail": "Evaluator approved."}, status=status.HTTP_200_OK)
+        return Response({"detail": "Evaluator approved."})
 
 
 class DisapproveEvaluatorView(APIView):
@@ -354,12 +309,9 @@ class DisapproveEvaluatorView(APIView):
 
     def post(self, request, profile_id):
         bank = request.user.profile.bank
-
         try:
             profile = Profile.objects.select_related("user").get(
-                id=profile_id,
-                bank=bank,
-                role="EVALUATOR",
+                id=profile_id, bank=bank, role="EVALUATOR"
             )
         except Profile.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -367,20 +319,18 @@ class DisapproveEvaluatorView(APIView):
         profile.is_approved = False
         profile.is_active = False
         profile.user.is_active = False
-
         profile.user.save(update_fields=["is_active"])
         profile.save(update_fields=["is_approved", "is_active"])
+
+        # Invalidate token so disapproved user is immediately logged out
+        Token.objects.filter(user=profile.user).delete()
 
         EvaluatorNotification.objects.create(
             user=profile.user,
             title="Account Disapproved",
             message="Your evaluator account request was disapproved by the bank admin. You cannot log in to the system.",
         )
-
-        return Response(
-            {"detail": "Evaluator disapproved and blocked."},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"detail": "Evaluator disapproved and blocked."})
 
 
 @api_view(["POST"])
@@ -395,14 +345,16 @@ def block_evaluator(request, profile_id):
 
     profile.is_active = False
     profile.user.is_active = False
-
     profile.user.save(update_fields=["is_active"])
     profile.save(update_fields=["is_active"])
+
+    # Invalidate token so blocked user is immediately logged out
+    Token.objects.filter(user=profile.user).delete()
 
     EvaluatorNotification.objects.create(
         user=profile.user,
         title="Account Blocked",
-        message="Your evaluator account has been blocked by the bank admin. Please contact your bank admin.",
+        message="Your evaluator account has been blocked by the bank admin. Please contact the bank admin for more information.",
     )
 
     return Response({"message": "Evaluator blocked successfully."})
@@ -426,14 +378,13 @@ def unblock_evaluator(request, profile_id):
 
     profile.is_active = True
     profile.user.is_active = True
-
     profile.user.save(update_fields=["is_active"])
     profile.save(update_fields=["is_active"])
 
     EvaluatorNotification.objects.create(
         user=profile.user,
         title="Account Unblocked",
-        message="Your evaluator account has been unblocked. You can now log in again.",
+        message="Your evaluator account has been re-enabled by the bank admin. You can now log in.",
     )
 
     return Response({"message": "Evaluator unblocked successfully."})
@@ -468,89 +419,62 @@ def search_evaluators(request):
         }
         for p in queryset
     ]
-
-    return Response(data, status=status.HTTP_200_OK)
+    return Response(data)
 
 
 # ==========================
 # Evaluator SME APIs
 # ==========================
 class SMEReportByBRView(APIView):
-    """
-    GET /api/smes/report-by-br/?br=BR001
-    Only allows viewing completed reports.
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request):
         br = (request.GET.get("br") or "").strip()
-
         profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
         if not br:
-            return Response(
-                {"detail": "BR number required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "BR number required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             sme = SME.objects.select_related("evaluator", "scored_by").get(
-                br_number=br,
-                bank=profile.bank,
+                br_number=br, bank=profile.bank
             )
         except SME.DoesNotExist:
             return Response(
-                {
-                    "detail": "SME not found. Please go to the Scoring part and register and start scoring."
-                },
+                {"detail": "SME not found. Please go to the Scoring part and register and start scoring."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         if not sme.is_scored:
             return Response(
-                {
-                    "detail": "Scoring has not been done. Please go to the Scoring part and start scoring."
-                },
+                {"detail": "Scoring has not been done. Please go to the Scoring part and start scoring."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return Response(_serialize_sme_basic(sme), status=status.HTTP_200_OK)
+        return Response(_serialize_sme_basic(sme))
 
 
 class SMEScoringByBRView(APIView):
-    """
-    GET /api/smes/scoring-by-br/?br=BR001
-    Only allows incomplete evaluations for:
-    - same assigned evaluator, or
-    - no assigned evaluator yet
-    """
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
     def get(self, request):
         br = (request.GET.get("br") or "").strip()
-
         profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
 
         if not br:
-            return Response(
-                {"detail": "BR number required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "BR number required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             sme = SME.objects.select_related("evaluator", "scored_by").get(
-                br_number=br,
-                bank=profile.bank,
+                br_number=br, bank=profile.bank
             )
         except SME.DoesNotExist:
             return Response(
-                {
-                    "detail": "SME not found. Please go to the Scoring part and register and start scoring."
-                },
+                {"detail": "SME not found. Please go to the Scoring part and register and start scoring."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -564,7 +488,7 @@ class SMEScoringByBRView(APIView):
         if block:
             return block
 
-        return Response(_serialize_sme_basic(sme), status=status.HTTP_200_OK)
+        return Response(_serialize_sme_basic(sme))
 
 
 class EvaluatorSMEsView(APIView):
@@ -574,9 +498,8 @@ class EvaluatorSMEsView(APIView):
         profile, err = _get_evaluator_profile_or_403(request)
         if err:
             return err
-
         smes = SME.objects.filter(bank=profile.bank).order_by("-id")
-        return Response(SMEListSerializer(smes, many=True).data, status=status.HTTP_200_OK)
+        return Response(SMEListSerializer(smes, many=True).data)
 
 
 class EvaluatorSummaryView(APIView):
@@ -592,23 +515,18 @@ class EvaluatorSummaryView(APIView):
         scored = qs.filter(is_scored=True).count()
         pending = qs.filter(is_scored=False).count()
 
-        scored_scores = list(
-            qs.filter(is_scored=True, total_score__isnull=False).values_list(
-                "total_score",
-                flat=True,
-            )
+        # Use DB aggregation instead of Python loop
+        result = qs.filter(is_scored=True, total_score__isnull=False).aggregate(
+            avg=Avg("total_score")
         )
-        avg = round(sum(scored_scores) / len(scored_scores), 2) if scored_scores else 0
+        avg = round(result["avg"] or 0, 2)
 
-        return Response(
-            {
-                "total_smes": total,
-                "scored_smes": scored,
-                "pending_smes": pending,
-                "avg_score": avg,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({
+            "total_smes": total,
+            "scored_smes": scored,
+            "pending_smes": pending,
+            "avg_score": avg,
+        })
 
 
 class SMECreateView(APIView):
@@ -657,76 +575,6 @@ class SMECreateView(APIView):
         )
 
 
-class SMEScoreUpdateView(APIView):
-    permission_classes = [IsAuthenticated, IsApprovedUser]
-
-    def post(self, request, pk):
-        profile, err = _get_evaluator_profile_or_403(request)
-        if err:
-            return err
-
-        sme = _get_sme_or_404(pk, profile.bank)
-        if not sme:
-            return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        block = _block_if_scored_by_other(sme, profile.user)
-        if block:
-            return block
-
-        block = _block_if_assigned_to_other_evaluator(sme, profile.user)
-        if block:
-            return block
-
-        try:
-            score = float(request.data.get("total_score"))
-        except (TypeError, ValueError):
-            return Response(
-                {"detail": "total_score must be a number."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if score < 0:
-            return Response(
-                {"detail": "total_score must be >= 0."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if sme.evaluator is None:
-            sme.evaluator = profile.user
-
-        sme.total_score = score
-        sme.is_scored = True
-        sme.scored_by = profile.user
-        sme.save(update_fields=["evaluator", "total_score", "is_scored", "scored_by"])
-
-        return Response(
-            {
-                "message": "Score saved.",
-                "id": sme.id,
-                "total_score": sme.total_score,
-                "is_scored": sme.is_scored,
-                "scored_by": sme.scored_by.username if sme.scored_by else None,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-# ==========================
-# Criterion Weights / Scores
-# ==========================
-class CriterionWeightsView(APIView):
-    permission_classes = [IsAuthenticated, IsApprovedUser]
-
-    def get(self, request):
-        profile, err = _get_evaluator_profile_or_403(request)
-        if err:
-            return err
-
-        qs = CriterionWeight.objects.filter(is_active=True).order_by("code")
-        data = [{"code": c.code, "title": c.title, "weight": float(c.weight)} for c in qs]
-        return Response(data, status=status.HTTP_200_OK)
-
-
 class SMECriterionScoresView(APIView):
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
@@ -744,28 +592,14 @@ class SMECriterionScoresView(APIView):
             return block
 
         items = SMECriterionScore.objects.filter(
-            sme=sme,
-            evaluator=profile.user,
+            sme=sme, evaluator=profile.user
         ).order_by("criterion_code")
 
         out = [
-            {
-                "code": item.criterion_code,
-                "score": item.score,
-                "notes": item.notes,
-                "followup": item.followup,
-            }
+            {"code": item.criterion_code, "score": item.score, "notes": item.notes, "followup": item.followup}
             for item in items
         ]
-
-        return Response(
-            {
-                "sme_id": sme.id,
-                "count": len(out),
-                "scores": out,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({"sme_id": sme.id, "count": len(out), "scores": out})
 
     def post(self, request, pk):
         profile, err = _get_evaluator_profile_or_403(request)
@@ -790,14 +624,9 @@ class SMECriterionScoresView(APIView):
 
         payload = request.data.get("scores")
         if not isinstance(payload, list):
-            return Response(
-                {"detail": "scores must be a list."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "scores must be a list."}, status=status.HTTP_400_BAD_REQUEST)
 
-        valid_codes = set(
-            CriterionWeight.objects.filter(is_active=True).values_list("code", flat=True)
-        )
+        valid_codes = set(CriterionWeight.objects.filter(is_active=True).values_list("code", flat=True))
 
         saved = 0
         for row in payload:
@@ -827,14 +656,13 @@ class SMECriterionScoresView(APIView):
                 criterion_code=code,
                 defaults={"score": score, "notes": notes, "followup": followup},
             )
-
             obj.score = score
             obj.notes = notes
             obj.followup = followup
             obj.save(update_fields=["score", "notes", "followup", "updated_at"])
             saved += 1
 
-        return Response({"detail": "Saved.", "saved": saved}, status=status.HTTP_200_OK)
+        return Response({"detail": "Saved.", "saved": saved})
 
 
 # ==========================
@@ -872,22 +700,14 @@ class SMESubmitCapabilityView(APIView):
             )
 
         weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
-
         score_rows = SMECriterionScore.objects.filter(sme=sme, evaluator=profile.user)
-
         scores_by_code = {
-            s.criterion_code: {
-                "score": s.score,
-                "notes": s.notes,
-                "followup": s.followup,
-            }
+            s.criterion_code: {"score": s.score, "notes": s.notes, "followup": s.followup}
             for s in score_rows
         }
 
         missing = [
-            code
-            for code in weights_by_code.keys()
-            if scores_by_code.get(code, {}).get("score") is None
+            code for code in weights_by_code if scores_by_code.get(code, {}).get("score") is None
         ]
         if missing:
             return Response(
@@ -895,10 +715,7 @@ class SMESubmitCapabilityView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        capability, rows, weaknesses = _compute_capability_excel(
-            scores_by_code,
-            weights_by_code,
-        )
+        capability, rows, weaknesses = _compute_capability_excel(scores_by_code, weights_by_code)
 
         sme.total_score = capability
         sme.is_scored = True
@@ -906,17 +723,14 @@ class SMESubmitCapabilityView(APIView):
         sme.evaluator = profile.user
         sme.save(update_fields=["total_score", "is_scored", "scored_by", "evaluator"])
 
-        return Response(
-            {
-                "message": "Submitted.",
-                "sme_id": sme.id,
-                "capability_score": capability,
-                "capability_percent": round(capability * 100, 0),
-                "rows": rows,
-                "weaknesses": weaknesses,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({
+            "message": "Submitted.",
+            "sme_id": sme.id,
+            "capability_score": capability,
+            "capability_percent": round(capability * 100, 0),
+            "rows": rows,
+            "weaknesses": weaknesses,
+        })
 
 
 class SMECapabilityResultView(APIView):
@@ -943,49 +757,34 @@ class SMECapabilityResultView(APIView):
             )
 
         weights_by_code = {w.code: Decimal(str(w.weight)) for w in weights}
-
         score_rows = SMECriterionScore.objects.filter(sme=sme, evaluator=profile.user)
-
         scores_by_code = {
-            s.criterion_code: {
-                "score": s.score,
-                "notes": s.notes,
-                "followup": s.followup,
-            }
+            s.criterion_code: {"score": s.score, "notes": s.notes, "followup": s.followup}
             for s in score_rows
         }
 
-        capability, rows, weaknesses = _compute_capability_excel(
-            scores_by_code,
-            weights_by_code,
-        )
+        capability, rows, weaknesses = _compute_capability_excel(scores_by_code, weights_by_code)
 
-        return Response(
-            {
-                "sme_id": sme.id,
-                "sme_name": sme.name,
-                "is_scored": sme.is_scored,
-                "stored_total_score": sme.total_score,
-                "capability_score": capability,
-                "capability_percent": round(capability * 100, 0),
-                "rows": rows,
-                "weaknesses": weaknesses,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({
+            "sme_id": sme.id,
+            "sme_name": sme.name,
+            "is_scored": sme.is_scored,
+            "stored_total_score": sme.total_score,
+            "capability_score": capability,
+            "capability_percent": round(capability * 100, 0),
+            "rows": rows,
+            "weaknesses": weaknesses,
+        })
 
 
 # ==========================
 # Bank Admin Dashboard APIs
+# All now use IsBankAdmin permission class — no manual role checks
 # ==========================
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_dashboard_summary(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    bank = user.profile.bank
+    bank = request.user.profile.bank
 
     smes = SME.objects.filter(bank=bank, is_active=True)
     scored_smes_qs = smes.filter(is_scored=True, total_score__isnull=False)
@@ -1005,123 +804,79 @@ def bank_admin_dashboard_summary(request):
         .first()
     )
 
-    return Response(
-        {
-            "total_smes": smes.count(),
-            "scored_smes": scored_smes_qs.count(),
-            "pending_smes": smes.filter(is_scored=False).count(),
-            "approved_evaluators": evaluators.filter(is_approved=True, is_active=True).count(),
-            "pending_evaluators": evaluators.filter(is_approved=False).count(),
-            "average_score": round(stats["average_score"] or 0, 2),
-            "highest_score": round(stats["highest_score"] or 0, 2),
-            "lowest_score": round(stats["lowest_score"] or 0, 2),
-            "top_industry": top_industry_row["industry"] if top_industry_row else "N/A",
-        }
-    )
+    return Response({
+        "total_smes": smes.count(),
+        "scored_smes": scored_smes_qs.count(),
+        "pending_smes": smes.filter(is_scored=False).count(),
+        "approved_evaluators": evaluators.filter(is_approved=True, is_active=True).count(),
+        "pending_evaluators": evaluators.filter(is_approved=False).count(),
+        "average_score": round(stats["average_score"] or 0, 2),
+        "highest_score": round(stats["highest_score"] or 0, 2),
+        "lowest_score": round(stats["lowest_score"] or 0, 2),
+        "top_industry": top_industry_row["industry"] if top_industry_row else "N/A",
+    })
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def bank_admin_pending_evaluators(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    bank = user.profile.bank
-
-    pending = (
-        Profile.objects.filter(bank=bank, role="EVALUATOR", is_approved=False)
-        .select_related("user")
-        .order_by("user__username")
-    )
-
-    data = [
-        {
-            "id": p.id,
-            "username": p.user.username,
-            "is_active": p.is_active,
-            "is_approved": p.is_approved,
-        }
-        for p in pending
-    ]
-
-    return Response(data)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_industry_analysis(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+    bank = request.user.profile.bank
 
-    bank = user.profile.bank
-
-    industries = (
-        SME.objects.filter(
-            bank=bank,
-            is_active=True,
-            is_scored=True,
-            total_score__isnull=False,
-        )
-        .values_list("industry", flat=True)
-        .distinct()
-    )
-
-    data = []
-    for industry in industries:
-        industry_name = industry or "Unknown"
-
-        qs = SME.objects.filter(
-            bank=bank,
-            is_active=True,
-            is_scored=True,
-            total_score__isnull=False,
-            industry=industry,
-        ).order_by("name")
-
-        stats = qs.aggregate(
+    # Single aggregation query instead of N queries in a loop
+    industry_stats = (
+        SME.objects.filter(bank=bank, is_active=True, is_scored=True, total_score__isnull=False)
+        .values("industry")
+        .annotate(
             total_smes=Count("id"),
             average_score=Avg("total_score"),
             highest_score=Max("total_score"),
             lowest_score=Min("total_score"),
         )
+    )
 
-        highest_sme = qs.order_by("-total_score", "br_number").first()
-        lowest_sme = qs.order_by("total_score", "br_number").first()
+    # Fetch all scored SMEs once and group in Python
+    all_smes = list(
+        SME.objects.filter(bank=bank, is_active=True, is_scored=True, total_score__isnull=False)
+        .order_by("name")
+        .values("id", "name", "br_number", "industry", "total_score")
+    )
 
-        data.append(
-            {
-                "industry": industry_name,
-                "total_smes": stats["total_smes"] or 0,
-                "average_score": round(stats["average_score"] or 0, 2),
-                "highest_score": round(stats["highest_score"] or 0, 2),
-                "lowest_score": round(stats["lowest_score"] or 0, 2),
-                "highest_sme_br": highest_sme.br_number if highest_sme else None,
-                "lowest_sme_br": lowest_sme.br_number if lowest_sme else None,
-                "smes": [
-                    {
-                        "id": sme.id,
-                        "name": sme.name,
-                        "br_number": sme.br_number,
-                        "total_score": round(sme.total_score or 0, 2),
-                    }
-                    for sme in qs
-                ],
-            }
-        )
+    smes_by_industry = {}
+    for sme in all_smes:
+        smes_by_industry.setdefault(sme["industry"], []).append(sme)
+
+    data = []
+    for row in industry_stats:
+        industry = row["industry"] or "Unknown"
+        industry_smes = smes_by_industry.get(row["industry"], [])
+        sorted_smes = sorted(industry_smes, key=lambda s: (-(s["total_score"] or 0), s["br_number"]))
+
+        data.append({
+            "industry": industry,
+            "total_smes": row["total_smes"],
+            "average_score": round(row["average_score"] or 0, 2),
+            "highest_score": round(row["highest_score"] or 0, 2),
+            "lowest_score": round(row["lowest_score"] or 0, 2),
+            "highest_sme_br": sorted_smes[0]["br_number"] if sorted_smes else None,
+            "lowest_sme_br": sorted_smes[-1]["br_number"] if sorted_smes else None,
+            "smes": [
+                {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "br_number": s["br_number"],
+                    "total_score": round(s["total_score"] or 0, 2),
+                }
+                for s in industry_smes
+            ],
+        })
 
     return Response(data)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_evaluator_analysis(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    bank = user.profile.bank
+    bank = request.user.profile.bank
 
     evaluator_profiles = (
         Profile.objects.filter(bank=bank, role="EVALUATOR")
@@ -1129,17 +884,8 @@ def bank_admin_evaluator_analysis(request):
         .order_by("user__username")
     )
 
-    approved_evaluators = evaluator_profiles.filter(is_approved=True, is_active=True).count()
-    pending_evaluators = evaluator_profiles.filter(is_approved=False).count()
-
     score_rows = (
-        SME.objects.filter(
-            bank=bank,
-            is_active=True,
-            is_scored=True,
-            total_score__isnull=False,
-            scored_by__isnull=False,
-        )
+        SME.objects.filter(bank=bank, is_active=True, is_scored=True, total_score__isnull=False, scored_by__isnull=False)
         .values("scored_by__id", "scored_by__username")
         .annotate(
             total_scored=Count("id"),
@@ -1180,24 +926,18 @@ def bank_admin_evaluator_analysis(request):
         item["is_active"] = profile.is_active
         evaluators.append(item)
 
-    return Response(
-        {
-            "approved_evaluators": approved_evaluators,
-            "pending_evaluators": pending_evaluators,
-            "total_evaluators": evaluator_profiles.count(),
-            "evaluators": evaluators,
-        }
-    )
+    return Response({
+        "approved_evaluators": evaluator_profiles.filter(is_approved=True, is_active=True).count(),
+        "pending_evaluators": evaluator_profiles.filter(is_approved=False).count(),
+        "total_evaluators": evaluator_profiles.count(),
+        "evaluators": evaluators,
+    })
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_evaluator_score_distribution(request, evaluator_id):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    bank = user.profile.bank
+    bank = request.user.profile.bank
 
     evaluator_profile = get_object_or_404(
         Profile.objects.select_related("user"),
@@ -1206,16 +946,9 @@ def bank_admin_evaluator_score_distribution(request, evaluator_id):
         user__id=evaluator_id,
     )
 
-    scored_smes = (
-        SME.objects.filter(
-            bank=bank,
-            is_active=True,
-            is_scored=True,
-            total_score__isnull=False,
-            scored_by=evaluator_profile.user,
-        )
-        .order_by("name")
-    )
+    scored_smes = SME.objects.filter(
+        bank=bank, is_active=True, is_scored=True, total_score__isnull=False, scored_by=evaluator_profile.user
+    ).order_by("name")
 
     stats = scored_smes.aggregate(
         average_score=Avg("total_score"),
@@ -1223,98 +956,67 @@ def bank_admin_evaluator_score_distribution(request, evaluator_id):
         lowest_score=Min("total_score"),
     )
 
-    sme_data = [
-        {
-            "sme_id": sme.id,
-            "sme_name": sme.name,
-            "br_number": sme.br_number,
-            "industry": sme.industry or "Unknown",
-            "total_score": round(sme.total_score or 0, 2),
-        }
-        for sme in scored_smes
-    ]
-
-    return Response(
-        {
-            "evaluator_id": evaluator_profile.user.id,
-            "profile_id": evaluator_profile.id,
-            "username": evaluator_profile.user.username,
-            "is_approved": evaluator_profile.is_approved,
-            "is_active": evaluator_profile.is_active,
-            "total_scored": scored_smes.count(),
-            "average_score": round(stats["average_score"] or 0, 2),
-            "highest_score": round(stats["highest_score"] or 0, 2),
-            "lowest_score": round(stats["lowest_score"] or 0, 2),
-            "smes": sme_data,
-        }
-    )
+    return Response({
+        "evaluator_id": evaluator_profile.user.id,
+        "profile_id": evaluator_profile.id,
+        "username": evaluator_profile.user.username,
+        "is_approved": evaluator_profile.is_approved,
+        "is_active": evaluator_profile.is_active,
+        "total_scored": scored_smes.count(),
+        "average_score": round(stats["average_score"] or 0, 2),
+        "highest_score": round(stats["highest_score"] or 0, 2),
+        "lowest_score": round(stats["lowest_score"] or 0, 2),
+        "smes": [
+            {
+                "sme_id": sme.id,
+                "sme_name": sme.name,
+                "br_number": sme.br_number,
+                "industry": sme.industry or "Unknown",
+                "total_score": round(sme.total_score or 0, 2),
+            }
+            for sme in scored_smes
+        ],
+    })
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_criterion_analysis(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+    bank = request.user.profile.bank
 
-    bank = user.profile.bank
-
-    criterion_codes = (
+    # Fetch everything in one query and group in Python — no N+1 loop
+    all_scores = list(
         SMECriterionScore.objects.filter(
-            sme__bank=bank,
-            sme__is_active=True,
-            score__isnull=False,
+            sme__bank=bank, sme__is_active=True, score__isnull=False
         )
-        .values_list("criterion_code", flat=True)
-        .distinct()
-        .order_by("criterion_code")
+        .select_related("sme")
+        .order_by("criterion_code", "sme__br_number")
+        .values("criterion_code", "sme__id", "sme__br_number", "score")
     )
 
+    from collections import defaultdict
+    grouped = defaultdict(list)
+    for row in all_scores:
+        grouped[row["criterion_code"]].append(row)
+
     data = []
-    for code in criterion_codes:
-        qs = (
-            SMECriterionScore.objects.filter(
-                sme__bank=bank,
-                sme__is_active=True,
-                score__isnull=False,
-                criterion_code=code,
-            )
-            .select_related("sme")
-            .order_by("sme__br_number")
-        )
-
-        stats = qs.aggregate(
-            average_score=Avg("score"),
-            total_entries=Count("id"),
-        )
-
-        data.append(
-            {
-                "criterion_code": code,
-                "average_score": round(stats["average_score"] or 0, 2),
-                "total_entries": stats["total_entries"] or 0,
-                "scores": [
-                    {
-                        "sme_id": item.sme.id,
-                        "br_number": item.sme.br_number,
-                        "score": item.score,
-                    }
-                    for item in qs
-                ],
-            }
-        )
+    for code, rows in sorted(grouped.items()):
+        scores_list = [r["score"] for r in rows]
+        avg = round(sum(scores_list) / len(scores_list), 2) if scores_list else 0
+        data.append({
+            "criterion_code": code,
+            "average_score": avg,
+            "total_entries": len(rows),
+            "scores": [{"sme_id": r["sme__id"], "br_number": r["sme__br_number"], "score": r["score"]} for r in rows],
+        })
 
     return Response(data)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_sme_list(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    bank = user.profile.bank
+    bank = request.user.profile.bank
 
     smes = (
         SME.objects.filter(bank=bank, is_active=True)
@@ -1322,7 +1024,7 @@ def bank_admin_sme_list(request):
         .values("id", "name", "br_number", "industry", "is_scored", "total_score")
     )
 
-    data = [
+    return Response([
         {
             "id": row["id"],
             "name": row["name"],
@@ -1332,21 +1034,18 @@ def bank_admin_sme_list(request):
             "total_score": round(row["total_score"] or 0, 2),
         }
         for row in smes
-    ]
-
-    return Response(data)
+    ])
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsBankAdmin])
 def bank_admin_sme_comparison(request):
-    user = request.user
-    if not _is_bank_admin(user):
-        return Response({"detail": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
-
-    bank = user.profile.bank
+    bank = request.user.profile.bank
     ids = request.GET.get("ids", "")
     id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+
+    # Cap at 20 to prevent denial-of-service via huge IN queries
+    id_list = id_list[:20]
 
     smes = (
         SME.objects.filter(bank=bank, is_active=True, id__in=id_list)
@@ -1356,22 +1055,20 @@ def bank_admin_sme_comparison(request):
 
     data = []
     for sme in smes:
-        criteria = {}
-        for row in sme.criterion_scores.all():
-            if row.score is not None:
-                criteria[row.criterion_code] = row.score
-
-        data.append(
-            {
-                "id": sme.id,
-                "name": sme.name,
-                "br_number": sme.br_number,
-                "industry": sme.industry or "Unknown",
-                "is_scored": sme.is_scored,
-                "total_score": round(sme.total_score or 0, 2),
-                "criteria": criteria,
-            }
-        )
+        criteria = {
+            row.criterion_code: row.score
+            for row in sme.criterion_scores.all()
+            if row.score is not None
+        }
+        data.append({
+            "id": sme.id,
+            "name": sme.name,
+            "br_number": sme.br_number,
+            "industry": sme.industry or "Unknown",
+            "is_scored": sme.is_scored,
+            "total_score": round(sme.total_score or 0, 2),
+            "criteria": criteria,
+        })
 
     return Response(data)
 
@@ -1392,6 +1089,8 @@ def evaluator_notifications(request):
 def mark_evaluator_notifications_read(request):
     EvaluatorNotification.objects.filter(user=request.user, is_read=False).update(is_read=True)
     return Response({"detail": "Notifications marked as read."})
+
+
 class SMEDetailForScoringView(APIView):
     permission_classes = [IsAuthenticated, IsApprovedUser]
 
@@ -1402,14 +1101,10 @@ class SMEDetailForScoringView(APIView):
 
         try:
             sme = SME.objects.select_related("evaluator", "scored_by").get(
-                pk=pk,
-                bank=profile.bank,
+                pk=pk, bank=profile.bank
             )
         except SME.DoesNotExist:
-            return Response(
-                {"detail": "SME not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return Response({"detail": "SME not found."}, status=status.HTTP_404_NOT_FOUND)
 
         block = _block_if_assigned_to_other_evaluator(sme, profile.user)
         if block:

@@ -43,13 +43,13 @@ export default function BankAdminDashboard() {
 const CRITERIA_NAMES = [
   "Business opportunity gap",
   "Customer pains and gains",
-  "Intrest to take risk",
+  "Interest to take risk",
   "Stakeholder Engagement & Support",
   "Competitive Position",
   "Management & Workforce Capability",
   "Streams of Revenue",
   "Cost Control & Efficiency",
-  "Taking adavantage of state assistance",
+  "Taking advantage of state assistance",
   "Operational Readiness",
 ];
                                       

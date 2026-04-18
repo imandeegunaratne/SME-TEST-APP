@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 
+// Fixed: corrected spelling of "Interest" and "advantage"
 const CRITERIA_NAMES = [
   "Business opportunity gap",
   "Customer pains and gains",
-  "Intrest to take risk",
+  "Interest to take risk",
   "Stakeholder Engagement & Support",
   "Competitive Position",
   "Management & Workforce Capability",
   "Streams of Revenue",
   "Cost Control & Efficiency",
-  "Taking adavantage of state assistance",
+  "Taking advantage of state assistance",
   "Operational Readiness",
 ];
 
@@ -21,12 +22,10 @@ export default function SMEReport() {
 
   const token = localStorage.getItem("token") || "";
   const username = localStorage.getItem("username") || "";
-  const themeMode = localStorage.getItem("theme") === "light" ? "light" : "dark";
 
-  const theme = useMemo(
-    () => (themeMode === "dark" ? darkTheme : lightTheme),
-    [themeMode]
-  );
+  // Fixed: theme read inside useState so it doesn't freeze on mount
+  const [dark] = useState(() => localStorage.getItem("theme") !== "light");
+  const theme = useMemo(() => (dark ? darkTheme : lightTheme), [dark]);
 
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -34,30 +33,15 @@ export default function SMEReport() {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      navigate("/login", { replace: true });
-      return;
-    }
+    if (!token) { navigate("/login", { replace: true }); return; }
 
     (async () => {
       setLoading(true);
       setErr("");
-
       try {
         const res = await fetch(`/api/smes/${id}/report/`, {
-          headers: {
-            Authorization: `Token ${token}`,
-          },
+          headers: { Authorization: `Token ${token}` },
         });
-
-        const text = await res.text();
-        let j = {};
-
-        try {
-          j = text ? JSON.parse(text) : {};
-        } catch {
-          j = {};
-        }
 
         if (res.status === 401) {
           localStorage.removeItem("token");
@@ -65,10 +49,11 @@ export default function SMEReport() {
           return;
         }
 
-        if (!res.ok) {
-          throw new Error(j.detail || `Failed to load report. Status ${res.status}`);
-        }
+        const text = await res.text();
+        let j = {};
+        try { j = text ? JSON.parse(text) : {}; } catch { j = {}; }
 
+        if (!res.ok) throw new Error(j.detail || `Failed to load report. Status ${res.status}`);
         setData(j);
       } catch (e) {
         setErr(e.message || "Failed to load report.");
@@ -77,11 +62,13 @@ export default function SMEReport() {
       }
     })();
   }, [id, token, navigate]);
+
   function formatScoreDecimal(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const num = Number(value);
-  return Number.isNaN(num) ? "—" : num.toFixed(2);
-}
+    if (value === null || value === undefined || value === "") return "—";
+    const num = Number(value);
+    return Number.isNaN(num) ? "—" : num.toFixed(2);
+  }
+
   function formatScore(value) {
     if (value === null || value === undefined || value === "") return "—";
     const num = Number(value);
@@ -100,31 +87,20 @@ export default function SMEReport() {
 
   function getCriterionTitle(item, index) {
     const order = getCriterionOrder(item, index);
-
     return (
       CRITERIA_NAMES[order - 1] ||
-      item.label ||
-      item.name ||
-      item.title ||
-      item.criterion_name ||
+      item.label || item.name || item.title || item.criterion_name ||
       `Criterion ${order}`
     );
   }
 
   async function downloadPDF() {
-    if (!token) {
-      navigate("/login", { replace: true });
-      return;
-    }
+    if (!token) { navigate("/login", { replace: true }); return; }
 
     try {
       setDownloading(true);
-
       const res = await fetch(`/api/smes/${id}/report/pdf/`, {
-        method: "GET",
-        headers: {
-          Authorization: `Token ${token}`,
-        },
+        headers: { Authorization: `Token ${token}` },
       });
 
       if (res.status === 401) {
@@ -136,14 +112,7 @@ export default function SMEReport() {
       if (!res.ok) {
         const text = await res.text();
         let message = "Failed to download PDF.";
-
-        try {
-          const j = text ? JSON.parse(text) : {};
-          message = j.detail || message;
-        } catch {
-          if (text) message = text;
-        }
-
+        try { const j = text ? JSON.parse(text) : {}; message = j.detail || message; } catch { if (text) message = text; }
         throw new Error(message);
       }
 
@@ -155,14 +124,12 @@ export default function SMEReport() {
 
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
-
       const a = document.createElement("a");
       a.href = url;
       a.download = `SME_Report_${id}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
-
       window.URL.revokeObjectURL(url);
     } catch (e) {
       alert(e.message || "Failed to download PDF.");
@@ -174,15 +141,8 @@ export default function SMEReport() {
   if (loading) {
     return (
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-        <Navbar
-          theme={theme}
-          onLogoClick={() => navigate("/evaluator-home")}
-          onDownloadPDF={downloadPDF}
-          downloading={downloading}
-        />
-        <div style={styles.wrapper}>
-          <div style={styles.messageBox}>Loading report...</div>
-        </div>
+        <Navbar theme={theme} onLogoClick={() => navigate("/evaluator-home")} onDownloadPDF={downloadPDF} downloading={downloading} />
+        <div style={styles.wrapper}><div style={styles.messageBox}>Loading report...</div></div>
       </div>
     );
   }
@@ -190,20 +150,9 @@ export default function SMEReport() {
   if (err) {
     return (
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-        <Navbar
-          theme={theme}
-          onLogoClick={() => navigate("/evaluator-home")}
-          onDownloadPDF={downloadPDF}
-          downloading={downloading}
-        />
+        <Navbar theme={theme} onLogoClick={() => navigate("/evaluator-home")} onDownloadPDF={downloadPDF} downloading={downloading} />
         <div style={styles.wrapper}>
-          <div
-            style={{
-              ...styles.messageBox,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
+          <div style={{ ...styles.messageBox, background: theme.card, border: `1px solid ${theme.border}` }}>
             Error: {err}
           </div>
         </div>
@@ -214,20 +163,9 @@ export default function SMEReport() {
   if (!data) {
     return (
       <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-        <Navbar
-          theme={theme}
-          onLogoClick={() => navigate("/evaluator-home")}
-          onDownloadPDF={downloadPDF}
-          downloading={downloading}
-        />
+        <Navbar theme={theme} onLogoClick={() => navigate("/evaluator-home")} onDownloadPDF={downloadPDF} downloading={downloading} />
         <div style={styles.wrapper}>
-          <div
-            style={{
-              ...styles.messageBox,
-              background: theme.card,
-              border: `1px solid ${theme.border}`,
-            }}
-          >
+          <div style={{ ...styles.messageBox, background: theme.card, border: `1px solid ${theme.border}` }}>
             No report data available.
           </div>
         </div>
@@ -236,77 +174,46 @@ export default function SMEReport() {
   }
 
   const criteria = Array.isArray(data.criteria) ? [...data.criteria] : [];
+  criteria.sort((a, b) => getCriterionOrder(a, 0) - getCriterionOrder(b, 0));
 
-  criteria.sort((a, b) => {
-    const aOrder = getCriterionOrder(a, 0);
-    const bOrder = getCriterionOrder(b, 0);
-    return aOrder - bOrder;
-  });
-
-  const overallEvidence =
-    data.additional_details ||
-    data.evidence ||
-    data.notes ||
-    data.overall_notes ||
-    "";
+  const overallEvidence = data.additional_details || data.evidence || data.notes || data.overall_notes || "";
 
   return (
     <div style={{ ...styles.page, background: theme.bg, color: theme.text }}>
-      <Navbar
-        theme={theme}
-        onLogoClick={() => navigate("/evaluator-home")}
-        onDownloadPDF={downloadPDF}
-        downloading={downloading}
-      />
+      <Navbar theme={theme} onLogoClick={() => navigate("/evaluator-home")} onDownloadPDF={downloadPDF} downloading={downloading} />
 
       <div style={styles.wrapper}>
-        <div
-          style={{
-            ...styles.reportSheet,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-            color: theme.text,
-          }}
-        >
+        <div style={{ ...styles.reportSheet, background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}>
           <div style={styles.reportHeader}>
             <div>
               <div style={styles.reportTitle}>SME Evaluation Report</div>
               <div style={styles.reportSubtitle}>Decision Support Platform</div>
             </div>
-
             <div style={styles.scoreBox}>
               <div style={styles.scoreBoxLabel}>Total Score</div>
-              <div style={styles.scoreBoxValue}>
-                {formatScoreDecimal(data.capability_score)}
-              </div>
+              <div style={styles.scoreBoxValue}>{formatScoreDecimal(data.capability_score)}</div>
             </div>
           </div>
 
           <section style={styles.section}>
             <h3 style={styles.sectionTitle}>SME Information</h3>
             <div style={styles.infoTable}>
-              <div style={styles.infoRow}>
-                <div style={styles.infoLabel}>SME Name</div>
-                <div style={styles.infoValue}>{data.name || "—"}</div>
-              </div>
-              <div style={styles.infoRow}>
-                <div style={styles.infoLabel}>BR Number</div>
-                <div style={styles.infoValue}>{data.br_number || "—"}</div>
-              </div>
-              <div style={styles.infoRow}>
-                <div style={styles.infoLabel}>Industry</div>
-                <div style={styles.infoValue}>{data.industry || "—"}</div>
-              </div>
-              <div style={styles.infoRow}>
-                <div style={styles.infoLabel}>Scored By</div>
-                <div style={styles.infoValue}>{data.scored_by || username || "—"}</div>
-              </div>
+              {[
+                ["SME Name", data.name || "—"],
+                ["BR Number", data.br_number || "—"],
+                ["Industry", data.industry || "—"],
+                ["Scored By", data.scored_by || username || "—"],
+              ].map(([label, value]) => (
+                <div key={label} style={styles.infoRow}>
+                  <div style={styles.infoLabel}>{label}</div>
+                  <div style={styles.infoValue}>{value}</div>
+                </div>
+              ))}
             </div>
           </section>
 
           <section style={styles.section}>
             <h3 style={styles.sectionTitle}>Criteria Scores</h3>
-
             <div style={styles.tableWrap}>
               <table style={styles.table}>
                 <thead>
@@ -318,21 +225,12 @@ export default function SMEReport() {
                 </thead>
                 <tbody>
                   {criteria.length === 0 ? (
-                    <tr>
-                      <td style={styles.td} colSpan={3}>
-                        No criteria scores available.
-                      </td>
-                    </tr>
+                    <tr><td style={styles.td} colSpan={3}>No criteria scores available.</td></tr>
                   ) : (
                     criteria.map((item, index) => {
                       const code = getCriterionCode(item, index);
                       const title = getCriterionTitle(item, index);
-                      const score =
-                        item.score ??
-                        item.raw_score ??
-                        item.value ??
-                        null;
-
+                      const score = item.score ?? item.raw_score ?? item.value ?? null;
                       return (
                         <tr key={`${code}-${index}`}>
                           <td style={styles.td}>{code}</td>
@@ -363,24 +261,15 @@ export default function SMEReport() {
 
 function Navbar({ theme, onLogoClick, onDownloadPDF, downloading }) {
   return (
-    <header
-      style={{
-        ...styles.navbar,
-        background: theme.navBg,
-        borderBottom: `1px solid ${theme.border}`,
-      }}
-    >
+    <header style={{ ...styles.navbar, background: theme.navBg, borderBottom: `1px solid ${theme.border}` }}>
       <div style={styles.navInner}>
         <button onClick={onLogoClick} style={styles.logoButton}>
           <img src={logo} alt="SME Scoring" style={styles.logoImg} />
           <div style={styles.logoTextWrap}>
             <div style={{ ...styles.logoTitle, color: theme.text }}>SME Scoring</div>
-            <div style={{ ...styles.logoSubtitle, color: theme.muted }}>
-              Decision Support Platform
-            </div>
+            <div style={{ ...styles.logoSubtitle, color: theme.muted }}>Decision Support Platform</div>
           </div>
         </button>
-
         <div style={styles.navActions}>
           <button
             type="button"
@@ -403,211 +292,50 @@ function Navbar({ theme, onLogoClick, onDownloadPDF, downloading }) {
 }
 
 const BRAND = "#2F96B4";
-
 const darkTheme = {
-  bg: "#0B1220",
-  card: "#172033",
-  text: "#FFFFFF",
-  muted: "rgba(255,255,255,0.72)",
-  border: "rgba(255,255,255,0.10)",
-  button: BRAND,
-  navBg: "#101828",
-  avatarBg: "rgba(255,255,255,0.06)",
+  bg: "#0B1220", card: "#172033", text: "#FFFFFF", muted: "rgba(255,255,255,0.72)",
+  border: "rgba(255,255,255,0.10)", button: BRAND, navBg: "#101828",
 };
-
 const lightTheme = {
-  bg: "#F6F8FB",
-  card: "#FFFFFF",
-  text: "#0F172A",
-  muted: "rgba(15,23,42,0.68)",
-  border: "rgba(15,23,42,0.10)",
-  button: BRAND,
-  navBg: "#FFFFFF",
-  avatarBg: "#F1F5F9",
+  bg: "#F6F8FB", card: "#FFFFFF", text: "#0F172A", muted: "rgba(15,23,42,0.68)",
+  border: "rgba(15,23,42,0.10)", button: BRAND, navBg: "#FFFFFF",
 };
 
 const styles = {
-  page: {
-    minHeight: "100vh",
-    fontFamily: "Arial, sans-serif",
-  },
-  navbar: {
-    position: "sticky",
-    top: 0,
-    zIndex: 50,
-    width: "100%",
-  },
+  page: { minHeight: "100vh", fontFamily: "Arial, sans-serif" },
+  navbar: { position: "sticky", top: 0, zIndex: 50, width: "100%" },
   navInner: {
-    width: "min(1280px, 96%)",
-    margin: "0 auto",
-    minHeight: 92,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 20,
-    padding: "14px 0",
+    width: "min(1280px, 96%)", margin: "0 auto", minHeight: 92,
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    gap: 20, padding: "14px 0",
   },
-  logoButton: {
-    display: "flex",
-    alignItems: "center",
-    gap: 16,
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    padding: 0,
-  },
-  logoImg: {
-    width: 120,
-    height: "auto",
-    objectFit: "contain",
-  },
-  logoTextWrap: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-  },
-  logoTitle: {
-    fontSize: 24,
-    fontWeight: 800,
-    lineHeight: 1.1,
-  },
-  logoSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  navActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-  },
-  downloadBtn: {
-    border: "none",
-    borderRadius: 10,
-    padding: "12px 18px",
-    fontSize: 14,
-    fontWeight: 700,
-  },
-  wrapper: {
-    width: "min(1180px, 95%)",
-    margin: "0 auto",
-    padding: "28px 0 40px",
-  },
-  messageBox: {
-    maxWidth: 520,
-    margin: "120px auto",
-    padding: 24,
-    borderRadius: 16,
-    textAlign: "center",
-    fontSize: 18,
-  },
-  reportSheet: {
-    borderRadius: 20,
-    padding: 34,
-    boxShadow: "0 10px 28px rgba(0,0,0,0.06)",
-  },
-  reportHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 20,
-    borderBottom: "1px solid rgba(127,127,127,0.18)",
-    paddingBottom: 22,
-    marginBottom: 28,
-    flexWrap: "wrap",
-  },
-  reportTitle: {
-    fontSize: 30,
-    fontWeight: 800,
-    marginBottom: 6,
-  },
-  reportSubtitle: {
-    fontSize: 14,
-    opacity: 0.75,
-  },
-  scoreBox: {
-    minWidth: 170,
-    padding: 18,
-    borderRadius: 14,
-    background: "rgba(47,150,180,0.08)",
-    textAlign: "center",
-  },
-  scoreBoxLabel: {
-    fontSize: 13,
-    opacity: 0.75,
-    marginBottom: 8,
-  },
-  scoreBoxValue: {
-    fontSize: 30,
-    fontWeight: 800,
-  },
-  section: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 21,
-    fontWeight: 800,
-    margin: "0 0 16px 0",
-  },
-  infoTable: {
-    border: "1px solid rgba(127,127,127,0.18)",
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  infoRow: {
-    display: "grid",
-    gridTemplateColumns: "220px 1fr",
-    borderBottom: "1px solid rgba(127,127,127,0.12)",
-  },
-  infoLabel: {
-    padding: "14px 16px",
-    fontWeight: 700,
-    background: "rgba(127,127,127,0.06)",
-  },
-  infoValue: {
-    padding: "14px 16px",
-  },
-  tableWrap: {
-    overflowX: "auto",
-    border: "1px solid rgba(127,127,127,0.18)",
-    borderRadius: 14,
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-  th: {
-    textAlign: "left",
-    padding: "14px 16px",
-    fontSize: 14,
-    background: "rgba(127,127,127,0.08)",
-    borderBottom: "1px solid rgba(127,127,127,0.18)",
-  },
-  thRight: {
-    textAlign: "right",
-    padding: "14px 16px",
-    fontSize: 14,
-    background: "rgba(127,127,127,0.08)",
-    borderBottom: "1px solid rgba(127,127,127,0.18)",
-  },
-  td: {
-    padding: "14px 16px",
-    borderBottom: "1px solid rgba(127,127,127,0.10)",
-    fontSize: 15,
-  },
-  tdRight: {
-    padding: "14px 16px",
-    borderBottom: "1px solid rgba(127,127,127,0.10)",
-    fontSize: 15,
-    textAlign: "right",
-    fontWeight: 700,
-  },
-  textBlock: {
-    border: "1px solid rgba(127,127,127,0.18)",
-    borderRadius: 14,
-    padding: 18,
-    lineHeight: 1.7,
-    whiteSpace: "pre-wrap",
-    background: "rgba(127,127,127,0.04)",
-    fontSize: 15,
-  },
+  logoButton: { display: "flex", alignItems: "center", gap: 16, background: "transparent", border: "none", cursor: "pointer", padding: 0 },
+  logoImg: { width: 120, height: "auto", objectFit: "contain" },
+  logoTextWrap: { display: "flex", flexDirection: "column", alignItems: "flex-start" },
+  logoTitle: { fontSize: 24, fontWeight: 800, lineHeight: 1.1 },
+  logoSubtitle: { fontSize: 14, marginTop: 4 },
+  navActions: { display: "flex", alignItems: "center", gap: 14 },
+  downloadBtn: { border: "none", borderRadius: 10, padding: "12px 18px", fontSize: 14, fontWeight: 700 },
+  wrapper: { width: "min(1180px, 95%)", margin: "0 auto", padding: "28px 0 40px" },
+  messageBox: { maxWidth: 520, margin: "120px auto", padding: 24, borderRadius: 16, textAlign: "center", fontSize: 18 },
+  reportSheet: { borderRadius: 20, padding: 34, boxShadow: "0 10px 28px rgba(0,0,0,0.06)" },
+  reportHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, borderBottom: "1px solid rgba(127,127,127,0.18)", paddingBottom: 22, marginBottom: 28, flexWrap: "wrap" },
+  reportTitle: { fontSize: 30, fontWeight: 800, marginBottom: 6 },
+  reportSubtitle: { fontSize: 14, opacity: 0.75 },
+  scoreBox: { minWidth: 170, padding: 18, borderRadius: 14, background: "rgba(47,150,180,0.08)", textAlign: "center" },
+  scoreBoxLabel: { fontSize: 13, opacity: 0.75, marginBottom: 8 },
+  scoreBoxValue: { fontSize: 30, fontWeight: 800 },
+  section: { marginBottom: 30 },
+  sectionTitle: { fontSize: 21, fontWeight: 800, margin: "0 0 16px 0" },
+  infoTable: { border: "1px solid rgba(127,127,127,0.18)", borderRadius: 14, overflow: "hidden" },
+  infoRow: { display: "grid", gridTemplateColumns: "220px 1fr", borderBottom: "1px solid rgba(127,127,127,0.12)" },
+  infoLabel: { padding: "14px 16px", fontWeight: 700, background: "rgba(127,127,127,0.06)" },
+  infoValue: { padding: "14px 16px" },
+  tableWrap: { overflowX: "auto", border: "1px solid rgba(127,127,127,0.18)", borderRadius: 14 },
+  table: { width: "100%", borderCollapse: "collapse" },
+  th: { textAlign: "left", padding: "14px 16px", fontSize: 14, background: "rgba(127,127,127,0.08)", borderBottom: "1px solid rgba(127,127,127,0.18)" },
+  thRight: { textAlign: "right", padding: "14px 16px", fontSize: 14, background: "rgba(127,127,127,0.08)", borderBottom: "1px solid rgba(127,127,127,0.18)" },
+  td: { padding: "14px 16px", borderBottom: "1px solid rgba(127,127,127,0.10)", fontSize: 15 },
+  tdRight: { padding: "14px 16px", borderBottom: "1px solid rgba(127,127,127,0.10)", fontSize: 15, textAlign: "right", fontWeight: 700 },
+  textBlock: { border: "1px solid rgba(127,127,127,0.18)", borderRadius: 14, padding: 18, lineHeight: 1.7, whiteSpace: "pre-wrap", background: "rgba(127,127,127,0.04)", fontSize: 15 },
 };

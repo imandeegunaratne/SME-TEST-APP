@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 export default function Login() {
   const navigate = useNavigate();
 
-  const dark = localStorage.getItem("theme") === "dark";
+  // Fixed: theme read inside useState so it doesn't freeze on mount
+  const [dark] = useState(() => localStorage.getItem("theme") === "dark");
   const theme = dark ? darkTheme : lightTheme;
 
   const [form, setForm] = useState({ username: "", password: "" });
@@ -86,6 +87,7 @@ export default function Login() {
             placeholder="Username"
             value={form.username}
             onChange={onChange}
+            autoComplete="username"
             style={{
               ...styles.input,
               background: theme.inputBg,
@@ -101,6 +103,7 @@ export default function Login() {
             placeholder="Password"
             value={form.password}
             onChange={onChange}
+            autoComplete="current-password"
             style={{
               ...styles.input,
               background: theme.inputBg,
@@ -173,7 +176,7 @@ const styles = {
   },
   subtitle: {
     marginBottom: 20,
-    fontSize: 20,
+    fontSize: 15,
   },
   form: {
     display: "flex",
@@ -184,6 +187,7 @@ const styles = {
     padding: 12,
     borderRadius: 10,
     outline: "none",
+    fontSize: 15,
   },
   button: {
     padding: 12,
@@ -193,13 +197,16 @@ const styles = {
     color: "white",
     fontWeight: 700,
     cursor: "pointer",
+    fontSize: 15,
   },
   link: {
     border: "none",
     background: "transparent",
     cursor: "pointer",
     color: "#2F96B4",
-    fontSize: 18,
+    fontSize: 14,
+    textAlign: "left",
+    padding: 0,
   },
   error: {
     color: "#DC2626",

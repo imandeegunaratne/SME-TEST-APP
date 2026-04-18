@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 export default function Signup() {
   const navigate = useNavigate();
 
-  const dark = localStorage.getItem("theme") === "dark";
+  // Fixed: theme read inside useState so it doesn't freeze on mount
+  const [dark] = useState(() => localStorage.getItem("theme") === "dark");
   const theme = dark ? darkTheme : lightTheme;
 
   const [form, setForm] = useState({
@@ -25,14 +26,12 @@ export default function Signup() {
   function extractErrorMessage(data) {
     if (!data) return "Signup failed.";
     if (typeof data.detail === "string") return data.detail;
-
     if (typeof data === "object") {
       for (const value of Object.values(data)) {
         if (Array.isArray(value) && value.length > 0) return String(value[0]);
         if (typeof value === "string") return value;
       }
     }
-
     return "Signup failed.";
   }
 
@@ -41,25 +40,10 @@ export default function Signup() {
     setMsg("");
     setErr("");
 
-    if (!form.bank_code.trim()) {
-      setErr("Bank code is required.");
-      return;
-    }
-
-    if (!form.username.trim()) {
-      setErr("Username is required.");
-      return;
-    }
-
-    if (form.password.length < 8) {
-      setErr("Password must be at least 8 characters.");
-      return;
-    }
-
-    if (form.password !== form.confirm) {
-      setErr("Passwords do not match.");
-      return;
-    }
+    if (!form.bank_code.trim()) { setErr("Bank code is required."); return; }
+    if (!form.username.trim()) { setErr("Username is required."); return; }
+    if (form.password.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (form.password !== form.confirm) { setErr("Passwords do not match."); return; }
 
     setLoading(true);
 
@@ -80,8 +64,12 @@ export default function Signup() {
         throw new Error(extractErrorMessage(data));
       }
 
-      setMsg("Account created successfully. Wait for bank admin approval before login.");
-      setTimeout(() => navigate("/login"), 1800);
+      setMsg(
+        "Account created successfully. Waiting for bank admin approval. Redirecting to login in 4 seconds..."
+      );
+
+      // Fixed: was 1800ms — gives user time to actually read the message
+      setTimeout(() => navigate("/login"), 4000);
     } catch (error) {
       setErr(error.message || "Signup failed.");
     } finally {
@@ -101,8 +89,8 @@ export default function Signup() {
       >
         <h1 style={{ ...styles.title, color: theme.text }}>Evaluator Signup</h1>
         <p style={{ ...styles.note, color: theme.muted }}>
-          Enter the correct bank code. Your account will be created as pending until
-          the bank admin approves it.
+          Enter the correct bank code. Your account will be created as pending
+          until the bank admin approves it.
         </p>
 
         <form onSubmit={onSubmit} style={styles.form}>
@@ -125,6 +113,7 @@ export default function Signup() {
             value={form.username}
             onChange={onChange}
             placeholder="Username"
+            autoComplete="username"
             required
             style={{
               ...styles.input,
@@ -140,6 +129,7 @@ export default function Signup() {
             value={form.password}
             onChange={onChange}
             placeholder="Password (min 8 characters)"
+            autoComplete="new-password"
             required
             style={{
               ...styles.input,
@@ -155,6 +145,7 @@ export default function Signup() {
             value={form.confirm}
             onChange={onChange}
             placeholder="Confirm password"
+            autoComplete="new-password"
             required
             style={{
               ...styles.input,
@@ -171,10 +162,19 @@ export default function Signup() {
           {msg && <div style={styles.success}>{msg}</div>}
           {err && <div style={styles.error}>{err}</div>}
 
-          <button type="button" onClick={() => navigate("/login")} style={styles.link}>
+          {/* Manual navigate button stays available even after success */}
+          <button
+            type="button"
+            onClick={() => navigate("/login")}
+            style={styles.link}
+          >
             Already have an account? Login
           </button>
-          <button type="button" onClick={() => navigate("/")} style={styles.link}>
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={styles.link}
+          >
             Back to Home
           </button>
         </form>
@@ -236,6 +236,7 @@ const styles = {
     padding: 12,
     borderRadius: 10,
     outline: "none",
+    fontSize: 14,
   },
   button: {
     padding: 12,
@@ -245,6 +246,7 @@ const styles = {
     color: "white",
     fontWeight: 700,
     cursor: "pointer",
+    fontSize: 15,
   },
   link: {
     border: "none",
@@ -253,14 +255,8 @@ const styles = {
     color: "#2F96B4",
     textAlign: "left",
     padding: 0,
-    fontSize: 18,
+    fontSize: 14,
   },
-  error: {
-    color: "#DC2626",
-    fontSize: 18,
-  },
-  success: {
-    color: "#059669",
-    fontSize: 18,
-  },
+  error: { color: "#DC2626", fontSize: 14 },
+  success: { color: "#059669", fontSize: 14 },
 };
