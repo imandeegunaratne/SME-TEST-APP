@@ -12,7 +12,7 @@ export default function ScoringPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const token = localStorage.getItem("token") || "";
-  const [dark, setDark] = useState(() => (localStorage.getItem("theme") ? localStorage.getItem("theme") === "dark" : true));
+  const [dark] = useState(() => (localStorage.getItem("theme") ? localStorage.getItem("theme") === "dark" : true));
   const [sme, setSme] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function useEvaluatorHome(navigate) {
   const role = localStorage.getItem("role");
@@ -28,11 +28,11 @@ export function useEvaluatorHome(navigate) {
   const notifyRef = useRef(null);
   const username = localStorage.getItem("username") || "Evaluator";
 
-  function authHeaders(extra = {}) {
+  const authHeaders = useCallback((extra = {}) => {
     return { Authorization: `Token ${localStorage.getItem("token")}`, ...extra };
-  }
+  }, []);
 
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     try {
       const res = await fetch("/api/evaluator/notifications/", { headers: authHeaders() });
       if (res.status === 401) {
@@ -47,7 +47,7 @@ export function useEvaluatorHome(navigate) {
     } catch (e) {
       console.error("Failed to load notifications:", e);
     }
-  }
+  }, [authHeaders, navigate]);
 
   async function markNotificationsAsRead() {
     try {
@@ -62,7 +62,7 @@ export function useEvaluatorHome(navigate) {
     }
   }
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setErr("");
     const tokenNow = localStorage.getItem("token");
@@ -91,11 +91,14 @@ export function useEvaluatorHome(navigate) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [authHeaders, loadNotifications, navigate, role]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   useEffect(() => {
     function handleClickOutside(event) {

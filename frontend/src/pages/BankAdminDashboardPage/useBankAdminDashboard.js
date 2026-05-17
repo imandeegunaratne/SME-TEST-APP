@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export function useBankAdminDashboard(navigate) {
   const [dark, setDark] = useState(() => {
@@ -32,7 +32,7 @@ export function useBankAdminDashboard(navigate) {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
-  async function apiGet(url) {
+  const apiGet = useCallback(async (url) => {
     const token = localStorage.getItem("token");
     const res = await fetch(url, {
       headers: { "Content-Type": "application/json", Authorization: `Token ${token}` },
@@ -42,9 +42,9 @@ export function useBankAdminDashboard(navigate) {
     try { data = await res.json(); } catch { try { text = await res.text(); } catch { text = ""; } }
     if (!res.ok) throw new Error(data?.detail || data?.message || data?.error || text || `Request failed with status ${res.status}`);
     return data;
-  }
+  }, []);
 
-  async function apiPost(url, body = {}) {
+  const apiPost = useCallback(async (url, body = {}) => {
     const token = localStorage.getItem("token");
     const res = await fetch(url, {
       method: "POST",
@@ -54,9 +54,9 @@ export function useBankAdminDashboard(navigate) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.detail || data?.message || data?.error || `Request failed with status ${res.status}`);
     return data;
-  }
+  }, []);
 
-  async function fetchPending() {
+  const fetchPending = useCallback(async () => {
     try {
       setError("");
       setLoading(true);
@@ -67,9 +67,9 @@ export function useBankAdminDashboard(navigate) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [apiGet]);
 
-  async function fetchAnalysisData() {
+  const fetchAnalysisData = useCallback(async () => {
     try {
       setError("");
       setAnalysisLoading(true);
@@ -90,9 +90,9 @@ export function useBankAdminDashboard(navigate) {
     } finally {
       setAnalysisLoading(false);
     }
-  }
+  }, [apiGet]);
 
-  async function fetchComparison(ids) {
+  const fetchComparison = useCallback(async (ids) => {
     try {
       setError("");
       const data = await apiGet(`/api/bank-admin/sme-comparison/?ids=${ids.join(",")}`);
@@ -100,9 +100,9 @@ export function useBankAdminDashboard(navigate) {
     } catch (err) {
       setError(err.message || "Failed to load comparison.");
     }
-  }
+  }, [apiGet]);
 
-  async function fetchEvaluatorDistribution(evaluatorId) {
+  const fetchEvaluatorDistribution = useCallback(async (evaluatorId) => {
     try {
       setError("");
       setSelectedEvaluatorLoading(true);
@@ -114,22 +114,31 @@ export function useBankAdminDashboard(navigate) {
     } finally {
       setSelectedEvaluatorLoading(false);
     }
-  }
+  }, [apiGet]);
 
   useEffect(() => {
-    fetchPending();
-    fetchAnalysisData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void fetchPending();
+      void fetchAnalysisData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchPending, fetchAnalysisData]);
 
   useEffect(() => {
-    if (selectedIds.length >= 2) fetchComparison(selectedIds);
-    else setComparisonData([]);
-  }, [selectedIds]);
+    const timer = window.setTimeout(() => {
+      if (selectedIds.length >= 2) void fetchComparison(selectedIds);
+      else setComparisonData([]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedIds, fetchComparison]);
 
   useEffect(() => {
-    if (selectedEvaluatorId) fetchEvaluatorDistribution(selectedEvaluatorId);
-    else setSelectedEvaluatorData(null);
-  }, [selectedEvaluatorId]);
+    const timer = window.setTimeout(() => {
+      if (selectedEvaluatorId) void fetchEvaluatorDistribution(selectedEvaluatorId);
+      else setSelectedEvaluatorData(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedEvaluatorId, fetchEvaluatorDistribution]);
 
   async function runAction(profileId, actionPath, successText, refreshSearch = false) {
     try {
@@ -138,9 +147,11 @@ export function useBankAdminDashboard(navigate) {
       setActionLoadingId(profileId);
       await apiPost(actionPath);
       setSuccessMsg(successText);
-      fetchPending();
-      fetchAnalysisData();
-      if (refreshSearch && searchEvaluator.trim()) handleSearchEvaluator();
+      await Promise.all([
+        fetchPending(),
+        fetchAnalysisData(),
+        refreshSearch && searchEvaluator.trim() ? handleSearchEvaluator() : Promise.resolve(),
+      ]);
     } catch (err) {
       setError(err.message || "Action failed.");
     } finally {

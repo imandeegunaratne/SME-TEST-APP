@@ -41,6 +41,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     # CorsMiddleware removed from here — duplicate deleted
 ]
 
@@ -83,6 +84,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# --- Login protection ---------------------------------------------------
+LOGIN_LOCKOUT_MAX_FAILURES = int(os.getenv("LOGIN_LOCKOUT_MAX_FAILURES", "5"))
+LOGIN_LOCKOUT_WINDOW_SECONDS = int(os.getenv("LOGIN_LOCKOUT_WINDOW_SECONDS", "900"))
+LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "900"))
+
 # --- Internationalisation -----------------------------------------------
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Colombo"
@@ -90,8 +96,9 @@ USE_I18N = True
 USE_TZ = True
 
 # --- Static files -------------------------------------------------------
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"   # needed for collectstatic in production
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -119,10 +126,11 @@ CORS_ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
         "DJANGO_CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:3000",
-    ).split(",")
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    )
+    .split(",")
     if o.strip()
-]
+    ]
 CORS_ALLOW_ALL_ORIGINS = os.getenv("DJANGO_CORS_ALLOW_ALL", "0") == "1"
 
 # --- CSRF ---------------------------------------------------------------
@@ -139,6 +147,7 @@ CSRF_TRUSTED_ORIGINS = [
 # These are safe to set even in development; they activate properly once
 # the server is behind TLS.
 SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "0") == "1"
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
@@ -147,6 +156,10 @@ SECURE_HSTS_PRELOAD = not DEBUG
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # --- Logging ------------------------------------------------------------
 LOGGING = {

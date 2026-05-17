@@ -17,6 +17,9 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponse
+from django.views.generic.base import RedirectView
+from django.conf import settings
+from django.urls import path
 
 def home(request):
     return HttpResponse("Backend is running! Try /api/health/")
@@ -25,4 +28,5 @@ urlpatterns = [
     path("", home),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
+    path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico')),
 ]

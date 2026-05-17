@@ -7,7 +7,7 @@ import { appNavbarStyles, appShellStyles, createAppTheme } from "../styles/appTh
 export default function Settings() {
   const navigate = useNavigate();
 
-  const [themeMode, setThemeMode] = useState(() => {
+  const [themeMode] = useState(() => {
     const saved = localStorage.getItem("theme");
     return saved === "light" ? "light" : "dark";
   });

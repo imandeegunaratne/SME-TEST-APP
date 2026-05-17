@@ -1,9 +1,11 @@
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Avg, Count, Max, Min
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -12,7 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import EvaluatorNotification, Profile, SME, CriterionWeight, SMECriterionScore
+from .models import AuditLog, EvaluatorNotification, LoginAttempt, Profile, SME, CriterionWeight, SMECriterionScore
 from .permission import IsBankAdmin, IsApprovedUser
 from .serializers import SMEListSerializer, EvaluatorSignupSerializer, EvaluatorNotificationSerializer
 
@@ -21,6 +23,7 @@ from .serializers import SMEListSerializer, EvaluatorSignupSerializer, Evaluator
 # Health Check
 # ==========================
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def health(request):
     return Response({"status": "ok", "message": "Django is connected!"})
 
@@ -64,6 +67,80 @@ def _get_evaluator_profile_or_403(request):
         )
 
     return profile, None
+
+
+def _client_ip(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
+def _audit(request, action, target_user=None, detail=None, actor=None):
+    user = actor if actor is not None else getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        user = None
+    AuditLog.objects.create(
+        actor=user,
+        target_user=target_user,
+        action=action,
+        ip_address=_client_ip(request),
+        user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000],
+        detail=detail or {},
+    )
+
+
+def _login_attempt_key(username, request):
+    return (username.strip().lower(), _client_ip(request))
+
+
+def _get_active_login_lock(username, request):
+    normalized_username, ip_address = _login_attempt_key(username, request)
+    if not normalized_username:
+        return None
+
+    attempt = LoginAttempt.objects.filter(
+        username=normalized_username,
+        ip_address=ip_address,
+        locked_until__gt=timezone.now(),
+    ).first()
+    return attempt
+
+
+def _record_failed_login(username, request):
+    normalized_username, ip_address = _login_attempt_key(username, request)
+    if not normalized_username:
+        return None
+
+    now = timezone.now()
+    attempt, _ = LoginAttempt.objects.get_or_create(
+        username=normalized_username,
+        ip_address=ip_address,
+    )
+
+    window_started = now - timezone.timedelta(seconds=settings.LOGIN_LOCKOUT_WINDOW_SECONDS)
+    if attempt.first_failed_at < window_started:
+        attempt.failed_count = 0
+        attempt.first_failed_at = now
+        attempt.locked_until = None
+
+    attempt.failed_count += 1
+    if attempt.failed_count >= settings.LOGIN_LOCKOUT_MAX_FAILURES:
+        attempt.locked_until = now + timezone.timedelta(seconds=settings.LOGIN_LOCKOUT_SECONDS)
+
+    attempt.save(update_fields=["failed_count", "first_failed_at", "locked_until", "last_failed_at"])
+    _audit(
+        request,
+        "LOGIN_LOCKED" if attempt.locked_until else "LOGIN_FAILURE",
+        detail={"username": normalized_username, "failed_count": attempt.failed_count},
+        actor=None,
+    )
+    return attempt
+
+
+def _clear_failed_login(username, request):
+    normalized_username, ip_address = _login_attempt_key(username, request)
+    LoginAttempt.objects.filter(username=normalized_username, ip_address=ip_address).delete()
 
 
 def _get_sme_or_404(pk, bank):
@@ -189,8 +266,17 @@ class LoginView(APIView):
         username = request.data.get("username", "").strip()
         password = request.data.get("password", "")
 
+        active_lock = _get_active_login_lock(username, request)
+        if active_lock:
+            seconds = max(1, int((active_lock.locked_until - timezone.now()).total_seconds()))
+            return Response(
+                {"detail": "Too many failed login attempts. Please try again later.", "retry_after_seconds": seconds},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         user = authenticate(username=username, password=password)
         if not user:
+            _record_failed_login(username, request)
             return Response(
                 {"detail": "Invalid username or password."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -222,7 +308,9 @@ class LoginView(APIView):
         if profile.role == "BANK_ADMIN" and not profile.is_active:
             return Response({"detail": "Your account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
+        _clear_failed_login(username, request)
         token, _ = Token.objects.get_or_create(user=user)
+        _audit(request, "LOGIN_SUCCESS", target_user=user, actor=user)
 
         return Response({
             "token": token.key,
@@ -317,6 +405,12 @@ class ApproveEvaluatorView(APIView):
             title="Account Approved",
             message="Your evaluator account has been approved. You can now log in and start using the system.",
         )
+        _audit(
+            request,
+            "EVALUATOR_APPROVED",
+            target_user=profile.user,
+            detail={"profile_id": profile.id, "bank_id": bank.id},
+        )
         return Response({"detail": "Evaluator approved."})
 
 
@@ -346,6 +440,12 @@ class DisapproveEvaluatorView(APIView):
             title="Account Disapproved",
             message="Your evaluator account request was disapproved by the bank admin. You cannot log in to the system.",
         )
+        _audit(
+            request,
+            "EVALUATOR_DISAPPROVED",
+            target_user=profile.user,
+            detail={"profile_id": profile.id, "bank_id": bank.id},
+        )
         return Response({"detail": "Evaluator disapproved and blocked."})
 
 
@@ -371,6 +471,12 @@ def block_evaluator(request, profile_id):
         user=profile.user,
         title="Account Blocked",
         message="Your evaluator account has been blocked by the bank admin. Please contact the bank admin for more information.",
+    )
+    _audit(
+        request,
+        "EVALUATOR_BLOCKED",
+        target_user=profile.user,
+        detail={"profile_id": profile.id, "bank_id": request.user.profile.bank_id},
     )
 
     return Response({"message": "Evaluator blocked successfully."})
@@ -401,6 +507,12 @@ def unblock_evaluator(request, profile_id):
         user=profile.user,
         title="Account Unblocked",
         message="Your evaluator account has been re-enabled by the bank admin. You can now log in.",
+    )
+    _audit(
+        request,
+        "EVALUATOR_UNBLOCKED",
+        target_user=profile.user,
+        detail={"profile_id": profile.id, "bank_id": request.user.profile.bank_id},
     )
 
     return Response({"message": "Evaluator unblocked successfully."})
@@ -712,7 +824,7 @@ class SMESubmitCapabilityView(APIView):
             CriterionWeight.objects.filter(is_active=True),
             key=lambda item: _criterion_code_sort_key(item.code),
         )
-        if not weights.exists():
+        if not weights:
             return Response(
                 {"detail": "No weights found. Insert CriterionWeight rows first."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -775,7 +887,7 @@ class SMECapabilityResultView(APIView):
             CriterionWeight.objects.filter(is_active=True),
             key=lambda item: _criterion_code_sort_key(item.code),
         )
-        if not weights.exists():
+        if not weights:
             return Response(
                 {"detail": "No weights found. Insert CriterionWeight rows first."},
                 status=status.HTTP_400_BAD_REQUEST,
