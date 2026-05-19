@@ -1,8 +1,15 @@
 export default function PasswordModal({
-  theme, styles, passwordForm, handlePasswordInput, passwordMsg, setShowPasswordModal, handleChangePassword, passwordSaving,
+  theme,
+  styles,
+  passwordForm,
+  handlePasswordInput,
+  passwordMsg,
+  setShowPasswordModal,
+  handleChangePassword,
+  passwordSaving,
 }) {
   const fields = [
-    ["old_password", "Old Password"],
+    ["old_password", "Current Password"],
     ["new_password", "New Password"],
     ["confirm_password", "Confirm New Password"],
   ];
@@ -11,28 +18,29 @@ export default function PasswordModal({
     <div style={styles.modalOverlay}>
       <div style={{ ...styles.modalCard, background: theme.card, color: theme.text, border: `1px solid ${theme.border}` }}>
         <div style={styles.modalTop}>
-          <h3 style={{ margin: 0, fontSize: 22 }}>Change Password</h3>
+          <h3 style={styles.modalTitle}>Change Password</h3>
           <button
             type="button"
             style={{ ...styles.closeBtn, color: theme.text }}
             onClick={() => setShowPasswordModal(false)}
             aria-label="Close change password form"
           >
-            Close
+            X
           </button>
         </div>
-        <form onSubmit={handleChangePassword}>
+        <form onSubmit={handleChangePassword} style={styles.modalForm}>
           {fields.map(([name, label]) => (
-            <div key={name}>
-              <label style={styles.label}>{label}</label>
+            <label key={name} style={styles.modalField}>
+              <span style={styles.modalLabel}>{label}</span>
               <input
                 type="password"
                 name={name}
                 value={passwordForm[name]}
                 onChange={handlePasswordInput}
-                style={{ ...styles.input, background: theme.inputBg, color: theme.text, border: `1px solid ${theme.border}` }}
+                autoComplete={name === "old_password" ? "current-password" : "new-password"}
+                style={{ ...styles.modalInput, background: theme.inputBg, color: theme.text, border: `1px solid ${theme.border}` }}
               />
-            </div>
+            </label>
           ))}
           {passwordMsg && (
             <div style={{ ...styles.passwordMsg, color: passwordMsg === "Password changed successfully." ? "#16a34a" : "#dc2626" }}>
@@ -47,7 +55,7 @@ export default function PasswordModal({
             >
               Cancel
             </button>
-            <button type="submit" style={{ ...styles.primaryBtn, background: theme.button }} disabled={passwordSaving}>
+            <button type="submit" style={{ ...styles.saveBtn, background: theme.button }} disabled={passwordSaving}>
               {passwordSaving ? "Updating..." : "Update Password"}
             </button>
           </div>

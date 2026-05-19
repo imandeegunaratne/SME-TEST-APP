@@ -165,7 +165,12 @@ function SmeAnalysis(props) {
                     Object.entries(item.criteria).sort(([codeA], [codeB]) => parseInt(codeA.replace(/\D/g, ""), 10) - parseInt(codeB.replace(/\D/g, ""), 10)).map(([code, score]) => {
                       const num = parseInt(code.replace(/\D/g, ""), 10);
                       const name = CRITERIA_NAMES[num - 1] || code;
-                      return <div key={code} style={styles.criteriaRow}><span>{code} â€” {name}</span><strong>{score}</strong></div>;
+                      return (
+                        <div key={code} style={styles.criteriaRow}>
+                          <span style={styles.criteriaLabel}>{code} {name}</span>
+                          <strong style={styles.criteriaScore}>{score}</strong>
+                        </div>
+                      );
                     })
                   )}
                 </div>

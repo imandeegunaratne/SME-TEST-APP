@@ -76,3 +76,72 @@ class EvaluatorNotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = EvaluatorNotification
         fields = ["id", "title", "message", "is_read", "created_at"]
+
+
+class BankSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bank
+        fields = ["id", "code", "name", "is_active"]
+
+
+class BankCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bank
+        fields = ["id", "code", "name", "is_active"]
+
+    def validate_code(self, value):
+        value = (value or "").strip().upper()
+        if not value:
+            raise serializers.ValidationError("Bank code is required.")
+        if Bank.objects.filter(code__iexact=value).exists():
+            raise serializers.ValidationError("A bank with this code already exists.")
+        return value
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Bank name is required.")
+        if Bank.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError("A bank with this name already exists.")
+        return value
+
+
+class BankAdminCreateSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    bank_id = serializers.IntegerField()
+
+    def validate_username(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Username is required.")
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_bank_id(self, value):
+        if not Bank.objects.filter(id=value, is_active=True).exists():
+            raise serializers.ValidationError("Select an active bank.")
+        return value
+
+    def create(self, validated_data):
+        bank = Bank.objects.get(id=validated_data.pop("bank_id"))
+        user = User.objects.create_user(
+            username=validated_data["username"].strip(),
+            password=validated_data["password"],
+            first_name=(validated_data.get("first_name") or "").strip(),
+            last_name=(validated_data.get("last_name") or "").strip(),
+            email=(validated_data.get("email") or "").strip(),
+            is_active=True,
+        )
+        Profile.objects.create(
+            user=user,
+            bank=bank,
+            role="BANK_ADMIN",
+            is_approved=True,
+            is_active=True,
+        )
+        return user

@@ -11,6 +11,7 @@ import BankAdminLogin from "./pages/BankAdminLogin";
 import BankAdminDashboard from "./pages/BankAdminDashbord";
 import Results from "./pages/Results";
 import EvaluatorProfile from "./pages/EvaluatorProfile";
+import SuperAdmin from "./pages/SuperAdmin";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -23,6 +24,15 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/help" element={<Help />} />
+
+        <Route
+          path="/super-admin"
+          element={
+            <ProtectedRoute allowRoles={["SUPER_ADMIN"]}>
+              <SuperAdmin />
+            </ProtectedRoute>
+          }
+        />
 
         {/* evaluator */}
         <Route

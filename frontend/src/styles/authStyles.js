@@ -28,14 +28,16 @@ export const authPageStyles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    padding: "clamp(14px, 4vw, 24px)",
     boxSizing: "border-box",
     fontFamily: APP_FONT_FAMILY,
   },
   card: {
     width: "100%",
-    padding: 30,
+    maxWidth: "100%",
+    padding: "clamp(18px, 5vw, 30px)",
     borderRadius: 18,
+    boxSizing: "border-box",
   },
   form: {
     display: "flex",
@@ -47,6 +49,9 @@ export const authPageStyles = {
     borderRadius: 10,
     outline: "none",
     fontSize: 15,
+    minHeight: 44,
+    width: "100%",
+    boxSizing: "border-box",
   },
   button: {
     padding: 12,
@@ -56,6 +61,7 @@ export const authPageStyles = {
     fontWeight: 700,
     cursor: "pointer",
     fontSize: 15,
+    minHeight: 44,
   },
   link: {
     border: "none",

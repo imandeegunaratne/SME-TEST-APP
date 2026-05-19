@@ -46,24 +46,29 @@ export function createAppTheme(mode, overrides = {}) {
 export const appShellStyles = {
   page: {
     minHeight: "100vh",
+    width: "100%",
+    minWidth: 0,
     fontFamily: APP_FONT_FAMILY,
+    overflowX: "hidden",
   },
 };
 
 export const appNavbarStyles = {
   shell: {
-    minHeight: 78,
-    padding: "14px 28px",
+    minHeight: 72,
+    padding: "clamp(10px, 2.5vw, 14px) clamp(14px, 4vw, 28px)",
     position: "sticky",
     top: 0,
     zIndex: 50,
     backdropFilter: "blur(10px)",
+    boxSizing: "border-box",
   },
   gridShell: {
-    display: "grid",
-    gridTemplateColumns: "1fr auto 1fr",
+    display: "flex",
+    justifyContent: "space-between",
     alignItems: "center",
     gap: 16,
+    flexWrap: "wrap",
   },
   flexShell: {
     display: "flex",
@@ -75,8 +80,9 @@ export const appNavbarStyles = {
   brand: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
+    gap: "clamp(10px, 2vw, 14px)",
     cursor: "pointer",
+    minWidth: 0,
   },
   brandTextWrap: {
     display: "flex",
@@ -85,15 +91,15 @@ export const appNavbarStyles = {
     lineHeight: 1.1,
   },
   logoImg: {
-    width: 108,
-    height: 58,
+    width: "clamp(78px, 18vw, 108px)",
+    height: "clamp(44px, 10vw, 58px)",
     objectFit: "contain",
     display: "block",
   },
   brandTitle: {
-    fontSize: 24,
+    fontSize: "clamp(18px, 4vw, 24px)",
     fontWeight: 800,
-    letterSpacing: "-0.3px",
+    letterSpacing: 0,
     marginBottom: 3,
   },
   brandSub: {
@@ -107,12 +113,15 @@ export const appNavbarStyles = {
     justifyContent: "center",
     gap: 10,
     flexWrap: "wrap",
+    minWidth: 0,
   },
   rightWrap: {
     display: "flex",
     justifyContent: "flex-end",
     alignItems: "center",
     gap: 10,
+    flexWrap: "wrap",
+    minWidth: 0,
   },
   iconBtn: {
     width: 46,
@@ -151,6 +160,7 @@ export const appNavbarStyles = {
     alignItems: "center",
     justifyContent: "space-between",
     gap: 20,
+    flexWrap: "wrap",
   },
   logoButton: {
     display: "flex",
@@ -162,5 +172,6 @@ export const appNavbarStyles = {
     padding: 0,
     color: "inherit",
     fontFamily: APP_FONT_FAMILY,
+    minWidth: 0,
   },
 };

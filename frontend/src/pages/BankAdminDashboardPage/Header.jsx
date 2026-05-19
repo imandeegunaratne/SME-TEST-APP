@@ -1,6 +1,6 @@
 import logo from "../../assets/logo.png";
 
-export default function Header({ theme, styles, dark, setDark, activeTab, setActiveTab, logout, navigate }) {
+export default function Header({ theme, styles, dark, setDark, activeTab, setActiveTab, logout, openPasswordModal, navigate }) {
   return (
     <header style={{ ...styles.navbar, background: theme.navBg, borderBottom: `1px solid ${theme.border}` }}>
       <div style={styles.brand} onClick={() => navigate("/bank-admin-dashboard")}>
@@ -27,6 +27,14 @@ export default function Header({ theme, styles, dark, setDark, activeTab, setAct
         ))}
       </div>
       <div style={styles.rightWrap}>
+        <button
+          onClick={openPasswordModal}
+          title="Change password"
+          aria-label="Change password"
+          style={{ ...styles.iconBtn, background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}
+        >
+          Password
+        </button>
         <button onClick={() => setDark(!dark)} style={{ ...styles.iconBtn, background: theme.card, border: `1px solid ${theme.border}`, color: theme.text }}>
           {dark ? "Light" : "Dark"}
         </button>

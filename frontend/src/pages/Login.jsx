@@ -53,7 +53,9 @@ export default function Login() {
       localStorage.setItem("bank_name", data.bank_name || "");
       localStorage.setItem("bank_code", data.bank_code || "");
 
-      if (data.role === "BANK_ADMIN") {
+      if (data.role === "SUPER_ADMIN") {
+        navigate("/super-admin");
+      } else if (data.role === "BANK_ADMIN") {
         navigate("/bank-admin-dashboard");
       } else {
         navigate("/evaluator-home");

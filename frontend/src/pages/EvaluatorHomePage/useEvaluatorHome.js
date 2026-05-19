@@ -41,7 +41,9 @@ export function useEvaluatorHome(navigate) {
         return;
       }
       const data = await res.json().catch(() => []);
-      const items = Array.isArray(data) ? data : [];
+      const items = (Array.isArray(data) ? data : []).filter(
+        (item) => !["Account Blocked", "Account Unblocked"].includes(item.title)
+      );
       setNotifications(items);
       setUnreadCount(items.filter((n) => !n.is_read).length);
     } catch (e) {

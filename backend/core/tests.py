@@ -87,3 +87,51 @@ class SecurityControlsTests(TestCase):
                 target_user=self.evaluator,
             ).exists()
         )
+
+    def test_super_admin_can_create_bank_admin(self):
+        superuser = User.objects.create_superuser(
+            username="owner",
+            email="owner@example.com",
+            password="StrongPass123!",
+        )
+        token = Token.objects.create(user=superuser)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(
+            "/api/super-admin/bank-admins/",
+            {
+                "username": "newbankadmin",
+                "password": "StrongPass123!",
+                "first_name": "New",
+                "last_name": "Admin",
+                "email": "new@example.com",
+                "bank_id": self.bank.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        created = User.objects.get(username="newbankadmin")
+        self.assertEqual(created.profile.role, "BANK_ADMIN")
+        self.assertTrue(created.profile.is_approved)
+        self.assertTrue(AuditLog.objects.filter(action="BANK_ADMIN_CREATED", target_user=created).exists())
+
+    def test_super_admin_can_reset_existing_bank_admin_password(self):
+        superuser = User.objects.create_superuser(
+            username="owner2",
+            email="owner2@example.com",
+            password="StrongPass123!",
+        )
+        token = Token.objects.create(user=superuser)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.client.post(
+            f"/api/super-admin/bank-admins/{self.admin_user.profile.id}/reset-password/",
+            {"new_password": "NewStrongPass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.admin_user.refresh_from_db()
+        self.assertTrue(self.admin_user.check_password("NewStrongPass123!"))
+        self.assertFalse(Token.objects.filter(user=self.admin_user).exists())

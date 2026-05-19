@@ -14,9 +14,16 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AuditLog, EvaluatorNotification, LoginAttempt, Profile, SME, CriterionWeight, SMECriterionScore
-from .permission import IsBankAdmin, IsApprovedUser
-from .serializers import SMEListSerializer, EvaluatorSignupSerializer, EvaluatorNotificationSerializer
+from .models import AuditLog, Bank, EvaluatorNotification, LoginAttempt, Profile, SME, CriterionWeight, SMECriterionScore
+from .permission import IsBankAdmin, IsApprovedUser, IsSuperAdmin
+from .serializers import (
+    BankAdminCreateSerializer,
+    BankCreateSerializer,
+    BankSerializer,
+    SMEListSerializer,
+    EvaluatorSignupSerializer,
+    EvaluatorNotificationSerializer,
+)
 
 
 # ==========================
@@ -282,16 +289,29 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            profile = user.profile
-        except Profile.DoesNotExist:
-            return Response({"detail": "Profile not found."}, status=status.HTTP_403_FORBIDDEN)
-
         if not user.is_active:
             return Response(
                 {"detail": "Your account has been blocked. Please contact your bank admin."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        if user.is_superuser:
+            _clear_failed_login(username, request)
+            token, _ = Token.objects.get_or_create(user=user)
+            _audit(request, "LOGIN_SUCCESS", target_user=user, actor=user)
+
+            return Response({
+                "token": token.key,
+                "role": "SUPER_ADMIN",
+                "username": user.username,
+                "bank_name": "",
+                "bank_code": "",
+            })
+
+        try:
+            profile = user.profile
+        except Profile.DoesNotExist:
+            return Response({"detail": "Profile not found."}, status=status.HTTP_403_FORBIDDEN)
 
         if profile.role == "EVALUATOR":
             if not profile.is_approved:
@@ -319,6 +339,110 @@ class LoginView(APIView):
             "bank_name": profile.bank.name if profile.bank else "",
             "bank_code": profile.bank.code if profile.bank else "",
         })
+
+
+class SuperAdminOverviewView(APIView):
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def get(self, request):
+        banks = Bank.objects.order_by("name")
+        bank_admins = (
+            Profile.objects.filter(role="BANK_ADMIN")
+            .select_related("user", "bank")
+            .order_by("bank__name", "user__username")
+        )
+        return Response({
+            "banks": BankSerializer(banks, many=True).data,
+            "bank_admins": [
+                {
+                    "profile_id": profile.id,
+                    "user_id": profile.user.id,
+                    "username": profile.user.username,
+                    "first_name": profile.user.first_name,
+                    "last_name": profile.user.last_name,
+                    "email": profile.user.email,
+                    "bank_id": profile.bank_id,
+                    "bank_name": profile.bank.name,
+                    "bank_code": profile.bank.code,
+                    "is_active": profile.is_active and profile.user.is_active,
+                }
+                for profile in bank_admins
+            ],
+        })
+
+
+class SuperAdminBankCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def post(self, request):
+        serializer = BankCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        bank = serializer.save()
+        _audit(
+            request,
+            "BANK_CREATED",
+            detail={"bank_id": bank.id, "bank_code": bank.code, "bank_name": bank.name},
+        )
+        return Response(BankSerializer(bank).data, status=status.HTTP_201_CREATED)
+
+
+class SuperAdminBankAdminCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def post(self, request):
+        serializer = BankAdminCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        _audit(
+            request,
+            "BANK_ADMIN_CREATED",
+            target_user=user,
+            detail={"bank_id": user.profile.bank_id, "profile_id": user.profile.id},
+        )
+        return Response(
+            {
+                "user_id": user.id,
+                "username": user.username,
+                "bank_name": user.profile.bank.name,
+                "bank_code": user.profile.bank.code,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SuperAdminBankAdminPasswordResetView(APIView):
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def post(self, request, profile_id):
+        try:
+            profile = Profile.objects.select_related("user", "bank").get(
+                id=profile_id,
+                role="BANK_ADMIN",
+            )
+        except Profile.DoesNotExist:
+            return Response({"detail": "Bank admin not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        new_password = request.data.get("new_password")
+        if not new_password:
+            return Response({"detail": "New password is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(new_password, user=profile.user)
+        except Exception as e:
+            errors = e.messages if hasattr(e, "messages") else [str(e)]
+            return Response({"detail": " ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile.user.set_password(new_password)
+        profile.user.save(update_fields=["password"])
+        Token.objects.filter(user=profile.user).delete()
+
+        return Response(
+            {
+                "detail": "Bank admin password updated successfully.",
+                "username": profile.user.username,
+                "bank_name": profile.bank.name,
+            }
+        )
 
 
 class ChangePasswordView(APIView):
@@ -467,11 +591,6 @@ def block_evaluator(request, profile_id):
     # Invalidate token so blocked user is immediately logged out
     Token.objects.filter(user=profile.user).delete()
 
-    EvaluatorNotification.objects.create(
-        user=profile.user,
-        title="Account Blocked",
-        message="Your evaluator account has been blocked by the bank admin. Please contact the bank admin for more information.",
-    )
     _audit(
         request,
         "EVALUATOR_BLOCKED",
@@ -503,11 +622,6 @@ def unblock_evaluator(request, profile_id):
     profile.user.save(update_fields=["is_active"])
     profile.save(update_fields=["is_active"])
 
-    EvaluatorNotification.objects.create(
-        user=profile.user,
-        title="Account Unblocked",
-        message="Your evaluator account has been re-enabled by the bank admin. You can now log in.",
-    )
     _audit(
         request,
         "EVALUATOR_UNBLOCKED",
@@ -1219,7 +1333,11 @@ def bank_admin_sme_comparison(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def evaluator_notifications(request):
-    items = EvaluatorNotification.objects.filter(user=request.user).order_by("-created_at")
+    items = (
+        EvaluatorNotification.objects.filter(user=request.user)
+        .exclude(title__in=["Account Blocked", "Account Unblocked"])
+        .order_by("-created_at")
+    )
     serializer = EvaluatorNotificationSerializer(items, many=True)
     return Response(serializer.data)
 

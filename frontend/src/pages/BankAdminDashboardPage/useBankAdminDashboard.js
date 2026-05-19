@@ -27,6 +27,10 @@ export function useBankAdminDashboard(navigate) {
   const [searchEvaluator, setSearchEvaluator] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ old_password: "", new_password: "", confirm_password: "" });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState("");
 
   useEffect(() => {
     localStorage.setItem("theme", dark ? "dark" : "light");
@@ -191,6 +195,46 @@ export function useBankAdminDashboard(navigate) {
     navigate("/");
   }
 
+  function openPasswordModal() {
+    setPasswordMsg("");
+    setPasswordForm({ old_password: "", new_password: "", confirm_password: "" });
+    setShowPasswordModal(true);
+  }
+
+  function handlePasswordInput(e) {
+    const { name, value } = e.target;
+    setPasswordForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPasswordMsg("");
+    if (!passwordForm.old_password || !passwordForm.new_password || !passwordForm.confirm_password) {
+      setPasswordMsg("Please fill all password fields.");
+      return;
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordMsg("New password and confirm password do not match.");
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await apiPost("/api/change-password/", {
+        old_password: passwordForm.old_password,
+        new_password: passwordForm.new_password,
+      });
+      setPasswordMsg("Password changed successfully.");
+      window.setTimeout(() => {
+        localStorage.clear();
+        navigate("/admin-login");
+      }, 1200);
+    } catch (err) {
+      setPasswordMsg(err.message || "Failed to change password.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
   function getBarHeight(value, max = 10) {
     const score = Number(value || 0);
     const top = Number(max || 10);
@@ -220,7 +264,8 @@ export function useBankAdminDashboard(navigate) {
     selectedIds, comparisonData, selectedEvaluatorId, setSelectedEvaluatorId, selectedEvaluatorData, selectedEvaluatorLoading,
     selectedIndustry, setSelectedIndustry, loading, analysisLoading, actionLoadingId, error, successMsg,
     searchEvaluator, setSearchEvaluator, searchResults, searchLoading, selectedIndustryData, industryMaxScore,
-    criterionMaxScore, getBarHeight, toggleSme, logout, handleSearchEvaluator,
+    criterionMaxScore, showPasswordModal, setShowPasswordModal, passwordForm, passwordSaving, passwordMsg,
+    getBarHeight, toggleSme, logout, openPasswordModal, handlePasswordInput, handleChangePassword, handleSearchEvaluator,
     approve: (id) => runAction(id, `/api/bank-admin/approve-evaluator/${id}/`, "Evaluator approved successfully.", true),
     disapprove: (id) => runAction(id, `/api/bank-admin/disapprove-evaluator/${id}/`, "Evaluator disapproved and blocked successfully.", true),
     blockEvaluator: (id) => runAction(id, `/api/bank-admin/block-evaluator/${id}/`, "Evaluator blocked successfully.", true),

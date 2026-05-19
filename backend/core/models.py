@@ -137,6 +137,8 @@ class AuditLog(models.Model):
         ("LOGIN_SUCCESS", "Login success"),
         ("LOGIN_FAILURE", "Login failure"),
         ("LOGIN_LOCKED", "Login locked"),
+        ("BANK_CREATED", "Bank created"),
+        ("BANK_ADMIN_CREATED", "Bank admin created"),
         ("EVALUATOR_APPROVED", "Evaluator approved"),
         ("EVALUATOR_DISAPPROVED", "Evaluator disapproved"),
         ("EVALUATOR_BLOCKED", "Evaluator blocked"),

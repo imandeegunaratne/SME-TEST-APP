@@ -14,6 +14,7 @@ export default function ProtectedRoute({ children, allowRoles }) {
   if (Array.isArray(allowRoles) && allowRoles.length > 0) {
     if (!allowRoles.includes(role)) {
       // Redirect user to their correct dashboard
+      if (role === "SUPER_ADMIN") return <Navigate to="/super-admin" replace />;
       if (role === "BANK_ADMIN") return <Navigate to="/bank-admin-dashboard" replace />;
       return <Navigate to="/evaluator-home" replace />;
     }

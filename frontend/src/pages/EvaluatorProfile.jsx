@@ -176,11 +176,11 @@ const darkTheme = {
 
 const styles = {
   page: appShellStyles.page,
-  main: { width: "min(680px, 92%)", margin: "32px auto", paddingBottom: 40 },
+  main: { width: "min(680px, calc(100% - 28px))", margin: "clamp(18px, 5vw, 32px) auto", paddingBottom: 40 },
   alert: { padding: "14px 16px", borderRadius: 12, marginBottom: 16, fontWeight: 600 },
-  card: { borderRadius: 20, padding: 24, boxShadow: "0 8px 24px rgba(0,0,0,0.06)" },
+  card: { borderRadius: 20, padding: "clamp(18px, 5vw, 24px)", boxShadow: "0 8px 24px rgba(0,0,0,0.06)" },
   infoGrid: { display: "flex", flexDirection: "column" },
-  infoRow: { display: "grid", gridTemplateColumns: "200px 1fr", padding: "14px 0" },
+  infoRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: 6, padding: "14px 0" },
   infoLabel: { fontSize: 14, fontWeight: 600 },
   infoValue: { fontSize: 15, fontWeight: 500 },
   form: { display: "flex", flexDirection: "column", gap: 12 },

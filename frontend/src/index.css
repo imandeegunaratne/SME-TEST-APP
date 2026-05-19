@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
 /* Small app-specific defaults */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html, body, #root {
   height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -11,6 +22,11 @@ body {
   font-size: 14px;
   color: #0F172A;
   background: #F4F7FB;
+  overflow-x: hidden;
+}
+
+#root {
+  min-width: 0;
 }
 
 button,
@@ -19,4 +35,42 @@ select,
 textarea {
   font: inherit;
   color: inherit;
+  max-width: 100%;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+table {
+  max-width: 100%;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+span,
+div,
+button,
+td,
+th {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  body {
+    font-size: 13px;
+  }
 }

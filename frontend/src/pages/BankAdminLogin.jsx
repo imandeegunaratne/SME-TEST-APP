@@ -9,7 +9,9 @@ export default function BankAdminLogin() {
   const existingToken = localStorage.getItem("token");
   const existingRole = localStorage.getItem("role");
   if (existingToken) {
-    if (existingRole === "BANK_ADMIN") {
+    if (existingRole === "SUPER_ADMIN") {
+      navigate("/super-admin", { replace: true });
+    } else if (existingRole === "BANK_ADMIN") {
       navigate("/bank-admin-dashboard", { replace: true });
     } else {
       navigate("/evaluator-home", { replace: true });
@@ -25,6 +27,9 @@ export default function BankAdminLogin() {
     shadow: dark
       ? "0 16px 32px rgba(0,0,0,0.18)"
       : "0 16px 32px rgba(15,23,42,0.08)",
+    infoBg: dark ? "rgba(47,150,180,0.12)" : "rgba(47,150,180,0.08)",
+    infoBorder: dark ? "rgba(47,150,180,0.24)" : "rgba(47,150,180,0.20)",
+    infoText: dark ? "#BFDBFE" : "#0F4C5C",
     errorBg: dark ? "rgba(239,68,68,0.10)" : "rgba(239,68,68,0.08)",
     errorBorder: dark ? "rgba(239,68,68,0.24)" : "rgba(239,68,68,0.20)",
     errorText: dark ? "#FCA5A5" : "#B91C1C",
@@ -66,17 +71,19 @@ export default function BankAdminLogin() {
         throw new Error(data.detail || "Login failed.");
       }
 
-      if (data.role !== "BANK_ADMIN") {
-        throw new Error("This account is not a bank admin account.");
-      }
-
       localStorage.setItem("token", data.token || "");
       localStorage.setItem("role", data.role || "");
       localStorage.setItem("username", data.username || "");
       localStorage.setItem("bank_name", data.bank_name || "");
       localStorage.setItem("bank_code", data.bank_code || "");
 
-      navigate("/bank-admin-dashboard");
+      if (data.role === "SUPER_ADMIN") {
+        navigate("/super-admin");
+      } else if (data.role === "BANK_ADMIN") {
+        navigate("/bank-admin-dashboard");
+      } else {
+        throw new Error("This account is not an admin account.");
+      }
     } catch (error) {
       localStorage.removeItem("token");
       localStorage.removeItem("role");
@@ -100,11 +107,8 @@ export default function BankAdminLogin() {
             boxShadow: theme.shadow,
           }}
         >
-          <h2 style={{ ...styles.h2, color: theme.text }}>Bank Admin Login</h2>
-          <p style={{ ...styles.sub, color: theme.mutedText }}>
-            Sign in with your bank admin account.
-          </p>
-
+          <h2 style={{ ...styles.h2, color: theme.text }}>Admin Access</h2>
+        
           <form onSubmit={onSubmit} style={styles.form}>
             <label style={{ ...styles.label, color: theme.text }} htmlFor="username">
               Username
@@ -162,6 +166,14 @@ export default function BankAdminLogin() {
               Back to Home
             </button>
 
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              style={{ ...styles.link, color: theme.link }}
+            >
+              Open Standard Login
+            </button>
+
             {err && (
               <div
                 style={{
@@ -184,7 +196,7 @@ export default function BankAdminLogin() {
 const styles = {
   page: {
     ...authPageStyles.page,
-    width: "100vw",
+    width: "100%",
     flexDirection: "column",
     fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   },
@@ -193,10 +205,10 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "24px 5%",
+    padding: "clamp(14px, 5vw, 24px) 5%",
   },
-  card: { ...authPageStyles.card, width: "min(460px, 100%)", borderRadius: 20, padding: "28px 24px" },
-  h2: { margin: 0, fontSize: 22, fontWeight: 800 },
+  card: { ...authPageStyles.card, width: "min(460px, 100%)", borderRadius: 20, padding: "clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px)" },
+  h2: { margin: 0, fontSize: "clamp(20px, 5vw, 22px)", fontWeight: 800 },
   sub: { marginTop: 8, marginBottom: 20, fontSize: 14, lineHeight: 1.6 },
   form: { ...authPageStyles.form, display: "grid", gap: 10 },
   label: { fontSize: 14, fontWeight: 600, marginTop: 2 },
@@ -225,5 +237,12 @@ const styles = {
     borderRadius: 12,
     padding: "10px 12px",
     fontSize: 14,
+  },
+  infoBox: {
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: "10px 12px",
+    fontSize: 14,
+    lineHeight: 1.5,
   },
 };

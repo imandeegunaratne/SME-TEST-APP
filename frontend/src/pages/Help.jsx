@@ -147,7 +147,7 @@ const styles = {
   page: {
     ...appShellStyles.page,
     minWidth: 0,
-    width: "100vw",
+    width: "100%",
     overflowX: "hidden",
     display: "flex",
     flexDirection: "column",
@@ -178,7 +178,7 @@ const styles = {
     flex: 1,
     display: "flex",
     justifyContent: "center",
-    padding: "28px 16px 44px",
+    padding: "clamp(18px, 5vw, 28px) 16px 44px",
   },
 
   container: {
@@ -200,7 +200,7 @@ const styles = {
     margin: 0,
     fontSize: 24,
     fontWeight: 800,
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
 
   text: {

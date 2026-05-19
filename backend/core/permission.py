@@ -46,3 +46,11 @@ class IsEvaluator(BasePermission):
             return False
         p = u.profile
         return bool(p.role == "EVALUATOR" and p.is_active and p.is_approved)
+
+
+class IsSuperAdmin(BasePermission):
+    """Only Django superusers can manage banks and bank admins."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        return bool(u and u.is_authenticated and u.is_active and u.is_superuser)
