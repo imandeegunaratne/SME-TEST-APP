@@ -5,12 +5,7 @@ services:
       - ./backend/.env.docker
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+    
 
   backend:
     build:
@@ -21,8 +16,8 @@ services:
     env_file:
       - ./backend/.env.docker
     depends_on:
-      db:
-        condition: service_healthy
+      - db
+       
     volumes:
       - static_volume:/app/staticfiles
       - ./backend/media:/app/media
