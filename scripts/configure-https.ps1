@@ -38,6 +38,6 @@ $envLines | Set-Content -LiteralPath $envFile
 Write-Host "Configured HTTPS settings for $Domain"
 Write-Host "Make sure DNS points $Domain to this server before requesting the certificate."
 Write-Host "After DNS is ready, run:"
-Write-Host "docker compose -f docker-compose.yml -f docker-compose.https.yml --profile certbot run --rm certbot certonly --webroot --webroot-path /var/www/certbot --email $Email --agree-tos --no-eff-email -d $Domain"
+Write-Host "docker compose --env-file backend/.env.docker -f docker-compose.yml -f docker-compose.https.yml --profile certbot run --rm certbot certonly --webroot --webroot-path /var/www/certbot --email $Email --agree-tos --no-eff-email -d $Domain"
 Write-Host "Then start HTTPS:"
-Write-Host "docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build"
+Write-Host "docker compose --env-file backend/.env.docker -f docker-compose.yml -f docker-compose.https.yml up -d --build"

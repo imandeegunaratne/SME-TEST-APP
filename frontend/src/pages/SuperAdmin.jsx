@@ -8,6 +8,7 @@ export default function SuperAdmin() {
   const theme = useMemo(() => createAppTheme(dark, dark ? darkTheme : lightTheme), [dark]);
   const [banks, setBanks] = useState([]);
   const [bankAdmins, setBankAdmins] = useState([]);
+  const [licenseForms, setLicenseForms] = useState({});
   const [bankForm, setBankForm] = useState({ code: "", name: "" });
   const [adminForm, setAdminForm] = useState({
     username: "",
@@ -46,8 +47,25 @@ export default function SuperAdmin() {
       setError("");
       setLoading(true);
       const data = await api("/api/super-admin/overview/");
-      setBanks(Array.isArray(data.banks) ? data.banks : []);
+      const nextBanks = Array.isArray(data.banks) ? data.banks : [];
+      setBanks(nextBanks);
       setBankAdmins(Array.isArray(data.bank_admins) ? data.bank_admins : []);
+      setLicenseForms((prev) => {
+        const next = { ...prev };
+        nextBanks.forEach((bank) => {
+          if (!next[bank.id]) {
+            next[bank.id] = {
+              status: bank.license?.status || "TRIAL",
+              seats: bank.license?.seats || 10,
+              max_smes: bank.license?.max_smes || 100,
+              max_evaluations: bank.license?.max_evaluations || 100,
+              starts_on: bank.license?.starts_on || "",
+              expires_on: bank.license?.expires_on || "",
+            };
+          }
+        });
+        return next;
+      });
     } catch (err) {
       setError(err.message || "Failed to load super admin data.");
     } finally {
@@ -127,6 +145,44 @@ export default function SuperAdmin() {
       setMessage(data.detail || "Bank admin password updated successfully.");
     } catch (err) {
       setError(err.message || "Failed to update bank admin password.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  function updateLicenseForm(bankId, field, value) {
+    setLicenseForms((prev) => ({
+      ...prev,
+      [bankId]: {
+        ...(prev[bankId] || {}),
+        [field]: value,
+      },
+    }));
+  }
+
+  async function saveLicense(bankId) {
+    const form = licenseForms[bankId] || {};
+    const smeEvaluationLimit = Number(form.max_smes || 0);
+    setSaving(`license-${bankId}`);
+    setError("");
+    setMessage("");
+    try {
+      await api(`/api/super-admin/banks/${bankId}/license/`, {
+        method: "POST",
+        body: JSON.stringify({
+          status: form.status || "TRIAL",
+          seats: Number(form.seats || 0),
+          max_smes: smeEvaluationLimit,
+          max_evaluations: smeEvaluationLimit,
+          starts_on: form.starts_on || null,
+          expires_on: form.expires_on || null,
+          features: { audit_logs: true, csv_export: true, pdf_reports: true },
+        }),
+      });
+      setMessage("Bank license updated successfully.");
+      await loadOverview();
+    } catch (err) {
+      setError(err.message || "Failed to update license.");
     } finally {
       setSaving("");
     }
@@ -237,6 +293,68 @@ export default function SuperAdmin() {
             </div>
           )}
         </section>
+
+        <section style={{ ...styles.panel, background: theme.card, borderColor: theme.border }}>
+          <h2 style={styles.panelTitle}>Bank Licensing Controls</h2>
+          <div style={styles.licenseGrid}>
+            {banks.map((bank) => {
+              const form = licenseForms[bank.id] || {};
+              const valid = bank.license?.is_valid;
+              const daysRemaining = bank.license?.days_remaining;
+              return (
+                <div key={bank.id} style={{ ...styles.licenseCard, borderColor: theme.border, background: theme.inputBg }}>
+                  <div style={styles.licenseTop}>
+                    <div>
+                      <strong>{bank.name}</strong>
+                      <div style={{ color: theme.muted, fontSize: 13 }}>{bank.code}</div>
+                      <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
+                        {daysRemaining == null ? "No expiry set" : daysRemaining < 0 ? "Expired" : `${daysRemaining} days remaining`}
+                      </div>
+                    </div>
+                    <span style={{ ...styles.statusPill, background: valid ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)", color: valid ? theme.successText : theme.errorText }}>
+                      {bank.license?.status || "MISSING"}
+                    </span>
+                  </div>
+                  <div style={styles.usageGrid}>
+                    <div style={{ ...styles.usageBox, borderColor: theme.border, background: theme.card }}>
+                      <span style={{ color: theme.muted }}>Evaluators</span>
+                      <strong>{bank.license?.active_users ?? 0} / {form.seats || bank.license?.seats || 0}</strong>
+                    </div>
+                    <div style={{ ...styles.usageBox, borderColor: theme.border, background: theme.card }}>
+                      <span style={{ color: theme.muted }}>SME / evaluations</span>
+                      <strong>{bank.license?.smes_used ?? 0} / {form.max_smes || bank.license?.max_smes || 0}</strong>
+                    </div>
+                    <div style={{ ...styles.usageBox, borderColor: theme.border, background: theme.card }}>
+                      <span style={{ color: theme.muted }}>Completed</span>
+                      <strong>{bank.license?.evaluations_used ?? 0} / {form.max_smes || bank.license?.max_smes || 0}</strong>
+                    </div>
+                  </div>
+                  <div style={styles.licenseFields}>
+                    <select value={form.status || "TRIAL"} onChange={(e) => updateLicenseForm(bank.id, "status", e.target.value)} style={{ ...styles.input, background: theme.card, borderColor: theme.border, color: theme.text }}>
+                      <option value="TRIAL">Trial</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="SUSPENDED">Suspended</option>
+                      <option value="EXPIRED">Expired</option>
+                    </select>
+                    <input type="number" min="1" value={form.seats || ""} onChange={(e) => updateLicenseForm(bank.id, "seats", e.target.value)} placeholder="Seats" style={{ ...styles.input, background: theme.card, borderColor: theme.border, color: theme.text }} />
+                    <input type="number" min="1" value={form.max_smes || ""} onChange={(e) => updateLicenseForm(bank.id, "max_smes", e.target.value)} placeholder="SME / evaluation limit" style={{ ...styles.input, background: theme.card, borderColor: theme.border, color: theme.text }} />
+                    <label style={styles.dateField}>
+                      <span style={{ color: theme.muted }}>Start date</span>
+                      <input type="date" value={form.starts_on || ""} onChange={(e) => updateLicenseForm(bank.id, "starts_on", e.target.value)} style={{ ...styles.input, background: theme.card, borderColor: theme.border, color: theme.text }} />
+                    </label>
+                    <label style={styles.dateField}>
+                      <span style={{ color: theme.muted }}>Expiry date</span>
+                    <input type="date" value={form.expires_on || ""} onChange={(e) => updateLicenseForm(bank.id, "expires_on", e.target.value)} style={{ ...styles.input, background: theme.card, borderColor: theme.border, color: theme.text }} />
+                    </label>
+                  </div>
+                  <button type="button" disabled={saving === `license-${bank.id}`} onClick={() => saveLicense(bank.id)} style={{ ...styles.primaryBtn, background: theme.primary }}>
+                    {saving === `license-${bank.id}` ? "Saving..." : "Save License"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </main>
     </div>
   );
@@ -277,4 +395,12 @@ const styles = {
   passwordCell: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
   inlineInput: { height: 38, minWidth: 0, flex: "1 1 180px", border: "1px solid", borderRadius: 8, padding: "0 12px", fontSize: 13, boxSizing: "border-box" },
   inlineBtn: { height: 38, border: 0, borderRadius: 8, color: "#fff", fontWeight: 700, cursor: "pointer", padding: "0 12px", whiteSpace: "nowrap" },
+  licenseGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))", gap: 14 },
+  licenseCard: { border: "1px solid", borderRadius: 8, padding: 14, display: "grid", gap: 12 },
+  licenseTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  statusPill: { borderRadius: 999, padding: "5px 10px", fontSize: 12, fontWeight: 800 },
+  usageGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 },
+  usageBox: { border: "1px solid", borderRadius: 8, padding: 10, display: "grid", gap: 4, fontSize: 12 },
+  licenseFields: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 },
+  dateField: { display: "grid", gap: 6, fontSize: 12, fontWeight: 700 },
 };

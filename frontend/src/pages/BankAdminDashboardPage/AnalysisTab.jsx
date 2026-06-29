@@ -183,6 +183,62 @@ function SmeAnalysis(props) {
   );
 }
 
+function ActivityAndExport({ theme, styles, auditLogs, auditLoading, exporting, handleExportSmes, license }) {
+  return (
+    <div style={{ ...styles.panel, background: theme.card, border: `1px solid ${theme.border}`, marginBottom: 24 }}>
+      <div style={styles.panelHead}>
+        <div>
+          <h3 style={{ margin: 0 }}>Governance & Reporting</h3>
+          <p style={{ ...styles.panelSub, color: theme.subText }}>Operational audit trail and portfolio export for bank review packs</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExportSmes}
+          disabled={exporting}
+          style={{ ...styles.searchBtn, opacity: exporting ? 0.7 : 1 }}
+        >
+          {exporting ? "Exporting..." : "Export CSV"}
+        </button>
+      </div>
+      <div style={{ ...styles.innerStatsGrid, marginBottom: 16 }}>
+        {[
+          ["Status", license?.status || "Missing"],
+          ["Timeline", license ? `${license.starts_on || "No start"} to ${license.expires_on || "No expiry"}` : "-"],
+          ["Evaluators", license ? `${license.active_users ?? 0} / ${license.seats}` : "-"],
+          ["SME / Evaluation Limit", license ? `${license.smes_used ?? 0} registered, ${license.evaluations_used ?? 0} completed / ${license.max_smes}` : "-"],
+          ["Expires", license?.expires_on || "No expiry"],
+        ].map(([label, value]) => (
+          <div key={label} style={{ ...styles.innerStatCard, background: theme.bg, border: `1px solid ${theme.border}` }}>
+            <div style={styles.innerStatLabel}>{label}</div>
+            <div style={styles.innerStatValue}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...styles.subPanel, background: theme.bg, border: `1px solid ${theme.border}` }}>
+        <h4 style={{ marginTop: 0, marginBottom: 14 }}>Recent Activity</h4>
+        {auditLoading ? (
+          <p style={{ color: theme.subText }}>Loading activity...</p>
+        ) : auditLogs.length === 0 ? (
+          <p style={{ color: theme.subText }}>No activity records available yet.</p>
+        ) : (
+          <div style={styles.auditLogList}>
+            {auditLogs.map((item) => (
+              <div key={item.id} style={{ ...styles.selectCard, background: theme.card, border: `1px solid ${theme.border}`, cursor: "default" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={styles.auditAction}>{item.action.replaceAll("_", " ")}</div>
+                  <div style={{ fontSize: 13, color: theme.subText, marginTop: 4 }}>
+                    {item.created_at} · Actor: {item.actor_username || "System"} · Target: {item.target_username || "-"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AnalysisTab(props) {
   const { theme, styles, analysisLoading } = props;
   return (
@@ -193,7 +249,7 @@ export default function AnalysisTab(props) {
           <p style={{ marginTop: 8, color: theme.subText }}>Evaluator and SME analysis for this bank.</p>
         </div>
       </div>
-      {analysisLoading ? <p>Loading analysis...</p> : <><EvaluatorAnalysis {...props} /><SmeAnalysis {...props} /></>}
+      {analysisLoading ? <p>Loading analysis...</p> : <><EvaluatorAnalysis {...props} /><SmeAnalysis {...props} /><ActivityAndExport {...props} /></>}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 export function buildReportHtml({ capability, weaknesses, rows, id }) {
-  const capTxt = capability == null ? "â€”" : `${capability.toFixed(2)} (${Math.round(capability * 100)}%)`;
-  const weaknessList = weaknesses.slice(0, 5).map((w) => `<li><b>#${w.rank}</b> ${w.title} â€” Gap: ${(w.gap ?? 0).toFixed(4)}</li>`).join("");
+  const capTxt = capability == null ? "-" : `${capability.toFixed(2)} (${Math.round(capability * 100)}%)`;
+  const weaknessList = weaknesses.slice(0, 5).map((w) => `<li><b>#${w.rank}</b> ${w.title} - Gap: ${(w.gap ?? 0).toFixed(4)}</li>`).join("");
   const tableRows = rows.map((r) => `
     <tr>
       <td>${r.code}</td><td>${r.title}</td><td>${Number(r.weight).toFixed(6)}</td>
@@ -14,7 +14,7 @@ export function buildReportHtml({ capability, weaknesses, rows, id }) {
     th { background: #f5f5f5; text-align: left; }
   </style></head><body>
     <h1>SME Capability Report</h1><div class="muted">SME ID: ${id}</div>
-    <div class="card"><h2>Capability Score</h2><div><b>${capTxt}</b></div><div class="muted">Calculated using FAHP weights Ã— normalized scores (Excel logic)</div></div>
+    <div class="card"><h2>Capability Score</h2><div><b>${capTxt}</b></div><div class="muted">Calculated using FAHP weights x normalized scores (Excel logic)</div></div>
     <div class="card"><h2>Weakness Criteria Explorer (Top 5)</h2><ol>${weaknessList}</ol></div>
     <div class="card"><h2>Details</h2><table><thead><tr><th>Code</th><th>Criteria</th><th>Weight</th><th>Score</th><th>Norm</th><th>Weighted</th><th>Gap</th></tr></thead><tbody>${tableRows}</tbody></table></div>
   </body></html>`;

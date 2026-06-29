@@ -47,6 +47,9 @@ export default function CriterionEditor({
         <p style={{ ...styles.sectionSub, color: theme.subText }}>
           {activeCriterion.code} • Criterion {activeIndex + 1} of {rubric.length}
         </p>
+        <p style={{ ...styles.criterionSummary, color: theme.subText }}>
+          {activeCriterion.summary}
+        </p>
       </div>
 
       <div style={styles.rangeRow}>

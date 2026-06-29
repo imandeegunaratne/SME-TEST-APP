@@ -23,6 +23,7 @@ export default function Signup() {
   });
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(false);
 
   function onChange(e) {
@@ -46,6 +47,7 @@ export default function Signup() {
     e.preventDefault();
     setMsg("");
     setErr("");
+    setModal(null);
 
     if (!form.bank_code.trim()) { setErr("Bank code is required."); return; }
     if (!form.username.trim()) { setErr("Username is required."); return; }
@@ -78,7 +80,11 @@ export default function Signup() {
       // Fixed: was 1800ms — gives user time to actually read the message
       setTimeout(() => navigate("/login"), 4000);
     } catch (error) {
-      setErr(error.message || "Signup failed.");
+      const message = error.message || "Signup failed.";
+      setErr(message);
+      if (message.toLowerCase().includes("renew your software")) {
+        setModal(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -189,6 +195,17 @@ export default function Signup() {
           </button>
         </form>
       </div>
+      {modal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalBox, background: theme.card, color: theme.text, border: `1px solid ${theme.border}` }}>
+            <div style={{ fontWeight: 800, fontSize: 20 }}>Renew Your Software</div>
+            <div style={{ marginTop: 10, color: theme.muted }}>{modal}</div>
+            <button type="button" onClick={() => setModal(null)} style={{ ...styles.button, marginTop: 16, background: theme.primary }}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -215,4 +232,21 @@ const styles = {
   link: { ...authPageStyles.link, color: "#2F96B4" },
   error: authPageStyles.error,
   success: authPageStyles.success,
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 200,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    background: "rgba(2,6,23,0.62)",
+  },
+  modalBox: {
+    width: "min(380px, 100%)",
+    borderRadius: 16,
+    padding: 22,
+    textAlign: "center",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.28)",
+  },
 };

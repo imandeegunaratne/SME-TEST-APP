@@ -1,11 +1,13 @@
 from django.contrib import admin
 
-from .models import AuditLog, Bank, CriterionWeight, LoginAttempt, Profile, SME, SMECriterionScore
+from .models import AuditLog, Bank, BankLicense, CriterionWeight, EvaluatorNotification, LoginAttempt, Profile, SME, SMECriterionScore
 admin.site.register(Bank)
+admin.site.register(BankLicense)
 admin.site.register(Profile)
 admin.site.register(SME)
 admin.site.register(CriterionWeight)
 admin.site.register(SMECriterionScore)
+admin.site.register(EvaluatorNotification)
 
 
 @admin.register(LoginAttempt)

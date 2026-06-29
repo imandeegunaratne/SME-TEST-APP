@@ -1,20 +1,3 @@
-services:
-  nginx:
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/https/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certbot/www:/var/www/certbot:ro
-      - ./nginx/certbot/conf:/etc/letsencrypt:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      - static_volume:/app/staticfiles:ro
-      - ./backend/media:/app/media:ro
-
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - ./nginx/certbot/www:/var/www/certbot
-      - ./nginx/certbot/conf:/etc/letsencrypt
-    profiles:
-      - certbot
+# The app now runs without nginx. Terminate HTTPS at your hosting platform,
+# load balancer, or CDN, then forward traffic to the backend service.
+services: {}

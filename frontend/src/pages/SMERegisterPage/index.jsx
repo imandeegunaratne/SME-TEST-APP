@@ -93,7 +93,7 @@ export default function SmeRegisterPage() {
                 style={{ ...styles.input, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", minHeight: 48, background: theme.inputBg, color: theme.text, border: `1px solid ${theme.borderStrong}` }}
               >
                 <span style={{ color: form.industry ? theme.text : theme.muted }}>{form.industry || "Select Industry"}</span>
-                <span style={{ fontSize: 12, color: theme.muted }}>â–¼</span>
+                <span style={{ fontSize: 12, color: theme.muted }}>v</span>
               </div>
               {industryOpen && (
                 <div style={{ ...styles.dropdownMenu, background: theme.dropdownBg, border: `1px solid ${theme.borderStrong}`, boxShadow: theme.shadow }}>
@@ -121,7 +121,9 @@ export default function SmeRegisterPage() {
       {modal && (
         <div style={styles.modalOverlay}>
           <div style={{ ...styles.modalBox, background: theme.card, color: theme.text, border: `1px solid ${theme.borderStrong}` }}>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>{modal.type === "error" ? "Registration Failed" : "Success"}</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>
+              {modal.message?.toLowerCase().includes("renew your software") ? "Renew Your Software" : modal.type === "error" ? "Registration Failed" : "Success"}
+            </div>
             <div style={{ marginTop: 10, color: theme.muted }}>{modal.message}</div>
             <button style={{ ...styles.btn, marginTop: 16, background: theme.button, color: theme.buttonText }} onClick={() => setModal(null)}>OK</button>
           </div>

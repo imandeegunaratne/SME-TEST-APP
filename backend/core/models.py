@@ -13,6 +13,52 @@ class Bank(models.Model):
         return self.name
 
 
+class BankLicense(models.Model):
+    PLAN_CHOICES = (
+        ("DEMO", "Demo"),
+        ("PILOT", "Pilot"),
+        ("ENTERPRISE", "Enterprise"),
+    )
+    STATUS_CHOICES = (
+        ("ACTIVE", "Active"),
+        ("TRIAL", "Trial"),
+        ("SUSPENDED", "Suspended"),
+        ("EXPIRED", "Expired"),
+    )
+
+    bank = models.OneToOneField(Bank, on_delete=models.CASCADE, related_name="license")
+    plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default="DEMO")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="TRIAL")
+    seats = models.PositiveIntegerField(default=10)
+    max_smes = models.PositiveIntegerField(default=100)
+    max_evaluations = models.PositiveIntegerField(default=100)
+    starts_on = models.DateField(null=True, blank=True)
+    expires_on = models.DateField(null=True, blank=True)
+    features = models.JSONField(default=dict, blank=True)
+    issued_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "expires_on"], name="core_bankli_status_6e0213_idx"),
+            models.Index(fields=["plan"], name="core_bankli_plan_b092d8_idx"),
+        ]
+
+    @property
+    def is_valid(self):
+        from django.utils import timezone
+
+        if self.status not in {"ACTIVE", "TRIAL"}:
+            return False
+        today = timezone.localdate()
+        if self.starts_on and self.starts_on > today:
+            return False
+        return self.expires_on is None or self.expires_on >= today
+
+    def __str__(self):
+        return f"{self.bank.code} - {self.plan} ({self.status})"
+
+
 class Profile(models.Model):
     ROLE_CHOICES = (
         ("BANK_ADMIN", "Bank Admin"),
@@ -24,6 +70,12 @@ class Profile(models.Model):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="EVALUATOR")
     is_approved = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["bank", "role", "is_active"], name="core_profil_bank_id_b6763d_idx"),
+            models.Index(fields=["bank", "role", "is_approved"], name="core_profil_bank_id_a94697_idx"),
+        ]
 
     def __str__(self):
         return f"{self.user.username} - {self.bank.name} - {self.role}"
@@ -45,6 +97,7 @@ class SME(models.Model):
 
     is_scored = models.BooleanField(default=False)
     total_score = models.FloatField(null=True, blank=True)
+    evaluated_at = models.DateTimeField(null=True, blank=True)
 
     scored_by = models.ForeignKey(
         User,
@@ -58,7 +111,12 @@ class SME(models.Model):
 
     class Meta:
         unique_together = ("bank", "br_number")
-        indexes = [models.Index(fields=["br_number"])]
+        indexes = [
+            models.Index(fields=["br_number"], name="core_sme_br_numb_723eed_idx"),
+            models.Index(fields=["bank", "is_active", "is_scored"], name="core_sme_bank_id_c27fd2_idx"),
+            models.Index(fields=["bank", "industry", "is_scored"], name="core_sme_bank_id_fc54cf_idx"),
+            models.Index(fields=["bank", "scored_by", "is_scored"], name="core_sme_bank_id_43c3c8_idx"),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.br_number})"
@@ -92,6 +150,10 @@ class SMECriterionScore(models.Model):
 
     class Meta:
         unique_together = ("sme", "evaluator", "criterion_code")
+        indexes = [
+            models.Index(fields=["sme", "evaluator"], name="core_smecri_sme_id_6eaf50_idx"),
+            models.Index(fields=["criterion_code"], name="core_smecri_criteri_b41b76_idx"),
+        ]
 
     def __str__(self):
         return f"{self.sme_id} {self.criterion_code} = {self.score}"
@@ -108,6 +170,9 @@ class EvaluatorNotification(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "is_read", "created_at"], name="core_evalua_user_id_9e2a72_idx"),
+        ]
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
@@ -124,8 +189,8 @@ class LoginAttempt(models.Model):
     class Meta:
         unique_together = ("username", "ip_address")
         indexes = [
-            models.Index(fields=["username", "ip_address"]),
-            models.Index(fields=["locked_until"]),
+            models.Index(fields=["username", "ip_address"], name="core_logina_usernam_a2eb75_idx"),
+            models.Index(fields=["locked_until"], name="core_logina_locked__14b664_idx"),
         ]
 
     def __str__(self):
@@ -143,6 +208,13 @@ class AuditLog(models.Model):
         ("EVALUATOR_DISAPPROVED", "Evaluator disapproved"),
         ("EVALUATOR_BLOCKED", "Evaluator blocked"),
         ("EVALUATOR_UNBLOCKED", "Evaluator unblocked"),
+        ("PASSWORD_CHANGED", "Password changed"),
+        ("BANK_ADMIN_PASSWORD_RESET", "Bank admin password reset"),
+        ("SME_CREATED", "SME created"),
+        ("SME_SCORES_SAVED", "SME scores saved"),
+        ("SME_SUBMITTED", "SME submitted"),
+        ("REPORT_EXPORTED", "Report exported"),
+        ("LICENSE_UPDATED", "License updated"),
     )
 
     actor = models.ForeignKey(
@@ -168,9 +240,9 @@ class AuditLog(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["action", "created_at"]),
-            models.Index(fields=["actor", "created_at"]),
-            models.Index(fields=["target_user", "created_at"]),
+            models.Index(fields=["action", "created_at"], name="core_auditl_action_29a2bf_idx"),
+            models.Index(fields=["actor", "created_at"], name="core_auditl_actor_i_41600a_idx"),
+            models.Index(fields=["target_user", "created_at"], name="core_auditl_target__059065_idx"),
         ]
 
     def __str__(self):

@@ -83,13 +83,13 @@ export default function ResultsPage() {
         </div>
         <div style={{ marginTop: 16, borderRadius: 16, border: `1px solid ${theme.border}`, background: theme.card, padding: 16 }}>
           <div style={{ fontWeight: 950, fontSize: 16 }}>Weakness criteria explorer</div>
-          <div style={{ color: theme.muted, fontSize: 13, marginTop: 6 }}>Ranked by GAP = weight Ã— (1 âˆ’ normalized score). Higher gap = bigger weakness.</div>
+          <div style={{ color: theme.muted, fontSize: 13, marginTop: 6 }}>Ranked by GAP = weight x (1 - normalized score). Higher gap = bigger weakness.</div>
           <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
             {weaknesses.slice(0, 6).map((w) => (
               <div key={w.code} style={{ borderRadius: 14, border: `1px solid ${theme.border}`, background: dark ? "rgba(47,150,180,0.08)" : "rgba(47,150,180,0.06)", padding: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ fontWeight: 950 }}>#{w.rank} â€” {w.title}</div>
-                  <div style={{ color: theme.muted, fontWeight: 900 }}>Gap: {(w.gap ?? 0).toFixed(4)} â€¢ Weight: {Number(w.weight).toFixed(4)} â€¢ Score: {w.score}</div>
+                  <div style={{ fontWeight: 950 }}>#{w.rank} - {w.title}</div>
+                  <div style={{ color: theme.muted, fontWeight: 900 }}>Gap: {(w.gap ?? 0).toFixed(4)} | Weight: {Number(w.weight).toFixed(4)} | Score: {w.score}</div>
                 </div>
               </div>
             ))}

@@ -18,7 +18,7 @@ export default function EvaluatorProfile() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const token = localStorage.getItem("token") || "";
   const username = localStorage.getItem("username") || "Evaluator";
-  const bankName = localStorage.getItem("bank_name") || "â€”";
+  const bankName = localStorage.getItem("bank_name") || "-";
   const role = localStorage.getItem("role") || "EVALUATOR";
 
   useEffect(() => {
@@ -112,10 +112,10 @@ export default function EvaluatorProfile() {
             {!loading && profile && (
               <>
                 {[
-                  ["Total SMEs", profile.total_smes ?? "â€”"],
-                  ["Scored SMEs", profile.scored_smes ?? "â€”"],
-                  ["Pending SMEs", profile.pending_smes ?? "â€”"],
-                  ["Average Score", profile.avg_score ?? "â€”"],
+                  ["Total SMEs", profile.total_smes ?? "-"],
+                  ["Scored SMEs", profile.scored_smes ?? "-"],
+                  ["Pending SMEs", profile.pending_smes ?? "-"],
+                  ["Average Score", profile.avg_score ?? "-"],
                 ].map(([label, value]) => (
                   <div key={label} style={{ ...styles.infoRow, borderBottom: `1px solid ${theme.border}` }}>
                     <div style={{ ...styles.infoLabel, color: theme.muted }}>{label}</div>

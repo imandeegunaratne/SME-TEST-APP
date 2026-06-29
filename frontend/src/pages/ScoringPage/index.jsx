@@ -16,6 +16,7 @@ export default function ScoringPage() {
   const [sme, setSme] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [renewalNotice, setRenewalNotice] = useState("");
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -145,6 +146,7 @@ export default function ScoringPage() {
 
     setSubmitting(true);
     setError("");
+    setRenewalNotice("");
 
     try {
       const saved = await saveDraftToBackend();
@@ -165,7 +167,11 @@ export default function ScoringPage() {
 
       navigate("/evaluator-home", { state: { activeTab: "scoring" } });
     } catch (submitError) {
-      setError(submitError.message || "Submit failed.");
+      const message = submitError.message || "Submit failed.";
+      if (message.toLowerCase().includes("renew your software")) {
+        setRenewalNotice(message);
+      }
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -224,6 +230,17 @@ export default function ScoringPage() {
       <footer style={{ ...styles.footer, color: theme.subText, borderTop: `1px solid ${theme.border}` }}>
         <div>Copyright {new Date().getFullYear()} SME Scoring Platform</div>
       </footer>
+      {renewalNotice && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalCard, background: theme.card, color: theme.text, border: `1px solid ${theme.border}` }}>
+            <div style={styles.modalTitle}>Renew Your Software</div>
+            <div style={{ marginTop: 10, color: theme.subText, lineHeight: 1.6 }}>{renewalNotice}</div>
+            <button type="button" style={{ ...styles.primaryBtn, marginTop: 16, background: theme.button, color: theme.buttonText }} onClick={() => setRenewalNotice("")}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

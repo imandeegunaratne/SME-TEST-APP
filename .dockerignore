@@ -1,0 +1,16 @@
+.git
+.gitignore
+**/.env
+**/.env.production
+**/venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/dist
+**/staticfiles
+**/media
+**/db.sqlite3
+**/*.log
+tmp
+.cache

@@ -1,24 +1,30 @@
+import csv
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Avg, Count, Max, Min
+from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AuditLog, Bank, EvaluatorNotification, LoginAttempt, Profile, SME, CriterionWeight, SMECriterionScore
+from .models import AuditLog, Bank, BankLicense, EvaluatorNotification, LoginAttempt, Profile, SME, CriterionWeight, SMECriterionScore
 from .permission import IsBankAdmin, IsApprovedUser, IsSuperAdmin
 from .serializers import (
+    AuditLogSerializer,
     BankAdminCreateSerializer,
     BankCreateSerializer,
+    BankLicenseSerializer,
     BankSerializer,
     SMEListSerializer,
     EvaluatorSignupSerializer,
@@ -250,6 +256,89 @@ def _serialize_sme_basic(sme):
     }
 
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+def _bank_audit_queryset(bank):
+    return (
+        AuditLog.objects.filter(
+            Q(actor__profile__bank=bank)
+            | Q(target_user__profile__bank=bank)
+            | Q(detail__bank_id=bank.id)
+        )
+        .select_related("actor", "target_user")
+        .distinct()
+        .order_by("-created_at")
+    )
+
+
+def _license_payload(bank):
+    license_obj = getattr(bank, "license", None)
+    if not license_obj:
+        return {
+            "status": "MISSING",
+            "is_valid": False,
+            "seats": 0,
+            "max_smes": 0,
+            "max_evaluations": 0,
+            "starts_on": None,
+            "expires_on": None,
+            "features": {},
+            "active_users": 0,
+            "smes_used": 0,
+            "evaluations_used": 0,
+            "days_remaining": None,
+        }
+    return BankLicenseSerializer(license_obj).data
+
+
+def _bank_license_problem(bank):
+    try:
+        license_obj = BankLicense.objects.get(bank=bank)
+    except BankLicense.DoesNotExist:
+        return "Bank license is not configured."
+    if not license_obj.is_valid:
+        return "Software license period is over. Renew your software."
+    active_users = Profile.objects.filter(bank=bank, is_active=True).count()
+    if active_users >= license_obj.seats:
+        return "Maximum evaluator level reached. Renew your software."
+    return None
+
+
+def _license_evaluations_used(license_obj):
+    evaluations = SME.objects.filter(
+        bank=license_obj.bank,
+        is_active=True,
+        is_scored=True,
+        evaluated_at__isnull=False,
+    ).only("evaluated_at")
+    total = 0
+    for sme in evaluations:
+        evaluated_on = timezone.localtime(sme.evaluated_at).date()
+        if license_obj.starts_on and evaluated_on < license_obj.starts_on:
+            continue
+        if license_obj.expires_on and evaluated_on > license_obj.expires_on:
+            continue
+        total += 1
+    return total
+
+
+def _license_evaluation_problem(bank):
+    try:
+        license_obj = BankLicense.objects.get(bank=bank)
+    except BankLicense.DoesNotExist:
+        return "Bank license is not configured."
+    if not license_obj.is_valid:
+        return "Software license period is over. Renew your software."
+
+    if _license_evaluations_used(license_obj) >= license_obj.max_smes:
+        return "Maximum evaluation level reached. Renew your software."
+    return None
+
+
 # ==========================
 # Authentication / Account
 # ==========================
@@ -295,7 +384,7 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        if user.is_superuser:
+        if user.is_active and user.is_superuser:
             _clear_failed_login(username, request)
             token, _ = Token.objects.get_or_create(user=user)
             _audit(request, "LOGIN_SUCCESS", target_user=user, actor=user)
@@ -338,6 +427,7 @@ class LoginView(APIView):
             "username": user.username,
             "bank_name": profile.bank.name if profile.bank else "",
             "bank_code": profile.bank.code if profile.bank else "",
+            "license": _license_payload(profile.bank) if profile.bank else None,
         })
 
 
@@ -345,7 +435,7 @@ class SuperAdminOverviewView(APIView):
     permission_classes = [IsAuthenticated, IsSuperAdmin]
 
     def get(self, request):
-        banks = Bank.objects.order_by("name")
+        banks = Bank.objects.select_related("license").order_by("name")
         bank_admins = (
             Profile.objects.filter(role="BANK_ADMIN")
             .select_related("user", "bank")
@@ -378,6 +468,17 @@ class SuperAdminBankCreateView(APIView):
         serializer = BankCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         bank = serializer.save()
+        BankLicense.objects.get_or_create(
+            bank=bank,
+            defaults={
+                "status": "TRIAL",
+                "seats": 10,
+                "max_smes": 100,
+                "max_evaluations": 100,
+                "starts_on": timezone.localdate(),
+                "features": {"audit_logs": True, "csv_export": True, "pdf_reports": True},
+            },
+        )
         _audit(
             request,
             "BANK_CREATED",
@@ -392,6 +493,10 @@ class SuperAdminBankAdminCreateView(APIView):
     def post(self, request):
         serializer = BankAdminCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        bank = Bank.objects.get(id=serializer.validated_data["bank_id"])
+        license_problem = _bank_license_problem(bank)
+        if license_problem:
+            return Response({"detail": license_problem}, status=status.HTTP_403_FORBIDDEN)
         user = serializer.save()
         _audit(
             request,
@@ -408,6 +513,33 @@ class SuperAdminBankAdminCreateView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class SuperAdminBankLicenseView(APIView):
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def post(self, request, bank_id):
+        bank = get_object_or_404(Bank, id=bank_id)
+        license_obj, _ = BankLicense.objects.get_or_create(bank=bank)
+        serializer = BankLicenseSerializer(license_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(bank=bank)
+        _audit(
+            request,
+            "LICENSE_UPDATED",
+            detail={"bank_id": bank.id, "bank_code": bank.code, "license": serializer.data},
+        )
+        return Response(serializer.data)
+
+
+class CurrentBankLicenseView(APIView):
+    permission_classes = [IsAuthenticated, IsApprovedUser]
+
+    def get(self, request):
+        profile = getattr(request.user, "profile", None)
+        if not profile:
+            return Response({"detail": "Profile not found."}, status=status.HTTP_403_FORBIDDEN)
+        return Response(_license_payload(profile.bank))
 
 
 class SuperAdminBankAdminPasswordResetView(APIView):
@@ -435,6 +567,12 @@ class SuperAdminBankAdminPasswordResetView(APIView):
         profile.user.set_password(new_password)
         profile.user.save(update_fields=["password"])
         Token.objects.filter(user=profile.user).delete()
+        _audit(
+            request,
+            "BANK_ADMIN_PASSWORD_RESET",
+            target_user=profile.user,
+            detail={"profile_id": profile.id, "bank_id": profile.bank_id},
+        )
 
         return Response(
             {
@@ -473,8 +611,43 @@ class ChangePasswordView(APIView):
 
         # Invalidate existing token so the user must log in again with the new password
         Token.objects.filter(user=user).delete()
+        _audit(request, "PASSWORD_CHANGED", target_user=user)
 
         return Response({"detail": "Password changed successfully. Please log in again."})
+
+
+class AuditLogListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.is_superuser:
+            queryset = AuditLog.objects.select_related("actor", "target_user").order_by("-created_at")
+        elif (
+            user.is_active
+            and hasattr(user, "profile")
+            and user.profile.role == "BANK_ADMIN"
+            and user.profile.is_active
+        ):
+            queryset = _bank_audit_queryset(user.profile.bank)
+        else:
+            return Response({"detail": "Bank admin access required."}, status=status.HTTP_403_FORBIDDEN)
+
+        action = (request.GET.get("action") or "").strip()
+        q = (request.GET.get("q") or "").strip()
+        if action:
+            queryset = queryset.filter(action=action)
+        if q:
+            queryset = queryset.filter(
+                Q(actor__username__icontains=q)
+                | Q(target_user__username__icontains=q)
+                | Q(ip_address__icontains=q)
+                | Q(action__icontains=q)
+            )
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(AuditLogSerializer(page, many=True).data)
 
 
 # ==========================
@@ -517,6 +690,10 @@ class ApproveEvaluatorView(APIView):
             )
         except Profile.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        license_problem = _bank_license_problem(bank)
+        if license_problem:
+            return Response({"detail": license_problem}, status=status.HTTP_403_FORBIDDEN)
 
         profile.is_approved = True
         profile.is_active = True
@@ -779,6 +956,12 @@ class SMECreateView(APIView):
         if err:
             return err
 
+        license_obj = getattr(profile.bank, "license", None)
+        if not license_obj or not license_obj.is_valid:
+            return Response({"detail": "Software license period is over. Renew your software."}, status=status.HTTP_403_FORBIDDEN)
+        if SME.objects.filter(bank=profile.bank, is_active=True).count() >= license_obj.max_smes:
+            return Response({"detail": "Maximum SME registration level reached. Renew your software."}, status=status.HTTP_403_FORBIDDEN)
+
         name = request.data.get("name")
         br = request.data.get("br_number")
         industry = request.data.get("industry", "")
@@ -801,6 +984,12 @@ class SMECreateView(APIView):
             industry=industry,
             bank=profile.bank,
             evaluator=profile.user,
+        )
+        _audit(
+            request,
+            "SME_CREATED",
+            target_user=profile.user,
+            detail={"sme_id": sme.id, "bank_id": profile.bank_id, "br_number": sme.br_number},
         )
 
         return Response(
@@ -904,6 +1093,12 @@ class SMECriterionScoresView(APIView):
             obj.save(update_fields=["score", "notes", "followup", "updated_at"])
             saved += 1
 
+        _audit(
+            request,
+            "SME_SCORES_SAVED",
+            target_user=profile.user,
+            detail={"sme_id": sme.id, "bank_id": profile.bank_id, "saved": saved},
+        )
         return Response({"detail": "Saved.", "saved": saved})
 
 
@@ -933,6 +1128,10 @@ class SMESubmitCapabilityView(APIView):
         if sme.evaluator is None:
             sme.evaluator = profile.user
             sme.save(update_fields=["evaluator"])
+
+        license_problem = _license_evaluation_problem(profile.bank)
+        if license_problem and (not sme.is_scored or "period is over" in license_problem):
+            return Response({"detail": license_problem}, status=status.HTTP_403_FORBIDDEN)
 
         weights = sorted(
             CriterionWeight.objects.filter(is_active=True),
@@ -969,7 +1168,19 @@ class SMESubmitCapabilityView(APIView):
         sme.is_scored = True
         sme.scored_by = profile.user
         sme.evaluator = profile.user
-        sme.save(update_fields=["total_score", "is_scored", "scored_by", "evaluator"])
+        sme.evaluated_at = timezone.now()
+        sme.save(update_fields=["total_score", "is_scored", "scored_by", "evaluator", "evaluated_at"])
+        _audit(
+            request,
+            "SME_SUBMITTED",
+            target_user=profile.user,
+            detail={
+                "sme_id": sme.id,
+                "bank_id": profile.bank_id,
+                "br_number": sme.br_number,
+                "capability_score": capability,
+            },
+        )
 
         return Response({
             "message": "Submitted.",
@@ -1289,6 +1500,64 @@ def bank_admin_sme_list(request):
         }
         for row in smes
     ])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsBankAdmin])
+def bank_admin_sme_export(request):
+    bank = request.user.profile.bank
+    queryset = (
+        SME.objects.filter(bank=bank, is_active=True)
+        .select_related("evaluator", "scored_by")
+        .order_by("name")
+    )
+
+    status_filter = (request.GET.get("status") or "").strip().lower()
+    industry = (request.GET.get("industry") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    if status_filter == "scored":
+        queryset = queryset.filter(is_scored=True)
+    elif status_filter == "pending":
+        queryset = queryset.filter(is_scored=False)
+    if industry:
+        queryset = queryset.filter(industry__iexact=industry)
+    if q:
+        queryset = queryset.filter(Q(name__icontains=q) | Q(br_number__icontains=q))
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="sme-portfolio-export.csv"'
+    writer = csv.writer(response)
+    writer.writerow([
+        "SME Name",
+        "BR Number",
+        "Industry",
+        "Status",
+        "Capability Score",
+        "Evaluator",
+        "Scored By",
+    ])
+    for sme in queryset:
+        writer.writerow([
+            sme.name,
+            sme.br_number,
+            sme.industry or "Unknown",
+            "Scored" if sme.is_scored else "Pending",
+            round(sme.total_score or 0, 2),
+            sme.evaluator.username if sme.evaluator else "",
+            sme.scored_by.username if sme.scored_by else "",
+        ])
+
+    _audit(
+        request,
+        "REPORT_EXPORTED",
+        detail={
+            "bank_id": bank.id,
+            "report": "sme_portfolio",
+            "filters": {"status": status_filter, "industry": industry, "q": q},
+        },
+    )
+    return response
 
 
 @api_view(["GET"])

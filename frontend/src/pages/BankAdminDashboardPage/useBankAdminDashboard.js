@@ -11,6 +11,10 @@ export function useBankAdminDashboard(navigate) {
   const [industryData, setIndustryData] = useState([]);
   const [evaluatorData, setEvaluatorData] = useState(null);
   const [criterionData, setCriterionData] = useState([]);
+  const [license, setLicense] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [smes, setSmes] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [comparisonData, setComparisonData] = useState([]);
@@ -28,6 +32,7 @@ export function useBankAdminDashboard(navigate) {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [renewalNotice, setRenewalNotice] = useState("");
   const [passwordForm, setPasswordForm] = useState({ old_password: "", new_password: "", confirm_password: "" });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState("");
@@ -60,6 +65,18 @@ export function useBankAdminDashboard(navigate) {
     return data;
   }, []);
 
+  const fetchAuditLogs = useCallback(async () => {
+    try {
+      setAuditLoading(true);
+      const data = await apiGet("/api/audit-logs/?page_size=50");
+      setAuditLogs(Array.isArray(data?.results) ? data.results : []);
+    } catch {
+      setAuditLogs([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [apiGet]);
+
   const fetchPending = useCallback(async () => {
     try {
       setError("");
@@ -89,12 +106,14 @@ export function useBankAdminDashboard(navigate) {
       setEvaluatorData(evaluatorRes || null);
       setCriterionData(Array.isArray(criterionRes) ? criterionRes : []);
       setSmes(Array.isArray(smeRes) ? smeRes : []);
+      apiGet("/api/license/current/").then(setLicense).catch(() => setLicense(null));
+      void fetchAuditLogs();
     } catch (err) {
       setError(err.message || "Failed to load analysis.");
     } finally {
       setAnalysisLoading(false);
     }
-  }, [apiGet]);
+  }, [apiGet, fetchAuditLogs]);
 
   const fetchComparison = useCallback(async (ids) => {
     try {
@@ -147,6 +166,7 @@ export function useBankAdminDashboard(navigate) {
   async function runAction(profileId, actionPath, successText, refreshSearch = false) {
     try {
       setError("");
+      setRenewalNotice("");
       setSuccessMsg("");
       setActionLoadingId(profileId);
       await apiPost(actionPath);
@@ -157,7 +177,11 @@ export function useBankAdminDashboard(navigate) {
         refreshSearch && searchEvaluator.trim() ? handleSearchEvaluator() : Promise.resolve(),
       ]);
     } catch (err) {
-      setError(err.message || "Action failed.");
+      const message = err.message || "Action failed.";
+      if (message.toLowerCase().includes("renew your software")) {
+        setRenewalNotice(message);
+      }
+      setError(message);
     } finally {
       setActionLoadingId(null);
     }
@@ -235,6 +259,35 @@ export function useBankAdminDashboard(navigate) {
     }
   }
 
+  async function handleExportSmes() {
+    try {
+      setError("");
+      setExporting(true);
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/bank-admin/smes/export/", {
+        headers: { Authorization: `Token ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.detail || "Export failed.");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "sme-portfolio-export.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      void fetchAuditLogs();
+    } catch (err) {
+      setError(err.message || "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function getBarHeight(value, max = 10) {
     const score = Number(value || 0);
     const top = Number(max || 10);
@@ -260,12 +313,13 @@ export function useBankAdminDashboard(navigate) {
   }, [selectedCriterionData]);
 
   return {
-    dark, setDark, activeTab, setActiveTab, pending, summary, industryData, evaluatorData, criterionData, smes,
+    dark, setDark, activeTab, setActiveTab, pending, summary, industryData, evaluatorData, criterionData, license, smes,
     selectedIds, comparisonData, selectedEvaluatorId, setSelectedEvaluatorId, selectedEvaluatorData, selectedEvaluatorLoading,
+    auditLogs, auditLoading, exporting,
     selectedIndustry, setSelectedIndustry, loading, analysisLoading, actionLoadingId, error, successMsg,
     searchEvaluator, setSearchEvaluator, searchResults, searchLoading, selectedIndustryData, industryMaxScore,
-    criterionMaxScore, showPasswordModal, setShowPasswordModal, passwordForm, passwordSaving, passwordMsg,
-    getBarHeight, toggleSme, logout, openPasswordModal, handlePasswordInput, handleChangePassword, handleSearchEvaluator,
+    criterionMaxScore, showPasswordModal, setShowPasswordModal, renewalNotice, setRenewalNotice, passwordForm, passwordSaving, passwordMsg,
+    getBarHeight, toggleSme, logout, openPasswordModal, handlePasswordInput, handleChangePassword, handleSearchEvaluator, handleExportSmes,
     approve: (id) => runAction(id, `/api/bank-admin/approve-evaluator/${id}/`, "Evaluator approved successfully.", true),
     disapprove: (id) => runAction(id, `/api/bank-admin/disapprove-evaluator/${id}/`, "Evaluator disapproved and blocked successfully.", true),
     blockEvaluator: (id) => runAction(id, `/api/bank-admin/block-evaluator/${id}/`, "Evaluator blocked successfully.", true),
